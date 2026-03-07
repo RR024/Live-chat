@@ -1,5 +1,7 @@
 # LiveChat — End-to-End Encrypted
 
+🔗 **Live Demo: [https://live-chat-hqp9.onrender.com](https://live-chat-hqp9.onrender.com)**
+
 A real-time group chat app where **the server never sees your messages**. Messages are encrypted in the browser before being sent, and decrypted only by the intended recipients.
 
 Built with Node.js, Socket.IO, and TweetNaCl. No accounts. No message logs. No snooping.
