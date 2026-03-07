@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LiveChat — Encrypted</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- TweetNaCl for E2E encryption -->
+  <script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl-fast.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tweetnacl-util@0.15.1/nacl-util.min.js"></script>
+</head>
+<body>
+
+  <!-- ===== JOIN SCREEN ===== -->
+  <div id="join-screen" class="screen active">
+    <!-- 3D Decorative Background -->
+    <div class="orb orb-1" aria-hidden="true"></div>
+    <div class="orb orb-2" aria-hidden="true"></div>
+    <div class="orb orb-3" aria-hidden="true"></div>
+    <div class="orb orb-4" aria-hidden="true"></div>
+    <div class="perspective-grid" aria-hidden="true"></div>
+    <div class="join-card">
+      <div class="logo">
+        <span class="logo-icon">💬</span>
+        <span class="logo-text">LiveChat</span>
+        <span class="logo-badge">E2E</span>
+      </div>
+      <p class="tagline">End-to-end encrypted. No logs. No snooping.</p>
+      <div class="form-group">
+        <label>Your name</label>
+        <input id="input-username" type="text" placeholder="e.g. Alex" maxlength="20" autocomplete="off" />
+      </div>
+      <div class="form-group">
+        <label>Room ID <span class="hint">(share with friend)</span></label>
+        <div class="room-row">
+          <input id="input-room" type="text" placeholder="e.g. room-xyz" maxlength="30" autocomplete="off" />
+          <button id="btn-gen-room" class="btn-secondary" title="Generate random room">⚡</button>
+        </div>
+      </div>
+      <button id="btn-join" class="btn-primary">Join Room</button>
+      <p id="join-error" class="error-msg"></p>
+    </div>
+  </div>
+
+  <!-- ===== CHAT SCREEN ===== -->
+  <div id="chat-screen" class="screen">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <span class="logo-icon">💬</span>
+        <span class="sidebar-title">LiveChat</span>
+        <span class="logo-badge">E2E</span>
+      </div>
+
+      <!-- Rooms section -->
+      <div class="rooms-section-header">
+        <span class="section-label">ROOMS</span>
+        <button id="btn-add-room" class="icon-btn add-room-btn" title="Join another room">＋</button>
+      </div>
+      <div id="add-room-panel" class="add-room-panel hidden">
+        <div class="add-room-row">
+          <input id="input-new-room" type="text" placeholder="Room ID…" maxlength="30" autocomplete="off" />
+          <button id="btn-join-new-room" class="btn-join-new">Join</button>
+        </div>
+        <p id="add-room-error" class="add-room-error"></p>
+      </div>
+      <ul id="room-tabs" class="room-tabs"></ul>
+
+      <div class="room-info">
+        <span class="room-label">ROOM</span>
+        <div class="room-id-row">
+          <span id="display-room-id" class="room-id-text"></span>
+          <button id="btn-copy-room" title="Copy Room ID" class="icon-btn">📋</button>
+        </div>
+      </div>
+      <div class="members-header">MEMBERS</div>
+      <ul id="user-list" class="user-list"></ul>
+      <div class="sidebar-footer">
+        <span id="self-indicator" class="self-name"></span>
+        <button id="btn-leave" class="btn-leave">Leave</button>
+      </div>
+    </aside>
+
+    <!-- Main chat area -->
+    <main class="chat-main">
+      <header class="chat-header">
+        <div class="chat-header-left">
+          <button id="btn-sidebar-toggle" title="Toggle members">☰</button>
+          <span id="chat-room-title" class="chat-room-title"></span>
+          <span class="enc-badge">🔒 End-to-End Encrypted</span>
+        </div>
+        <div id="typing-indicator" class="typing-indicator"></div>
+      </header>
+
+      <div id="messages" class="messages-area">
+        <canvas id="chat-bg-canvas" aria-hidden="true"></canvas>
+        <div class="welcome-msg">
+          <div class="welcome-msg-card">
+            <div class="welcome-lock">🔐</div>
+            <div class="welcome-title">End-to-End Encrypted Chat</div>
+            <p class="welcome-sub">Every message is encrypted in your browser before it leaves.<br/>Nobody — not even the server — can read them.</p>
+            <div class="welcome-tags">
+              <span class="welcome-tag">Zero Logs</span>
+              <span class="welcome-tag">No Snooping</span>
+              <span class="welcome-tag">Real-time</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="emoji-picker" class="emoji-picker hidden"></div>
+      <div id="sticker-picker" class="sticker-picker hidden"></div>
+
+      <footer class="chat-input-bar">
+        <button id="btn-emoji" class="toolbar-btn" title="Emojis">😊</button>
+        <button id="btn-sticker" class="toolbar-btn" title="Stickers">🎨</button>
+        <div class="input-wrapper">
+          <textarea id="message-input" placeholder="Type a message…" rows="1" maxlength="2000"></textarea>
+        </div>
+        <button id="btn-send" class="btn-send" title="Send">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </footer>
+    </main>
+
+  </div>
+
+  <div id="sidebar-overlay" class="sidebar-overlay"></div>
+
+  <!-- Toast notifications -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="crypto.js"></script>
+  <script src="emojis.js"></script>
+  <script src="stickers.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

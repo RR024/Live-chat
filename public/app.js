@@ -1,0 +1,795 @@
+
+(function () {
+  'use strict';
+
+  // ── DOM refs ─────────────────────────────────────────────────────────
+  const joinScreen       = document.getElementById('join-screen');
+  const chatScreen       = document.getElementById('chat-screen');
+  const inputUsername    = document.getElementById('input-username');
+  const inputRoom        = document.getElementById('input-room');
+  const btnGenRoom       = document.getElementById('btn-gen-room');
+  const btnJoin          = document.getElementById('btn-join');
+  const joinError        = document.getElementById('join-error');
+  const messagesArea     = document.getElementById('messages');
+  const messageInput     = document.getElementById('message-input');
+  const btnSend          = document.getElementById('btn-send');
+  const btnEmoji         = document.getElementById('btn-emoji');
+  const btnSticker       = document.getElementById('btn-sticker');
+  const emojiPicker      = document.getElementById('emoji-picker');
+  const stickerPicker    = document.getElementById('sticker-picker');
+  const userListEl       = document.getElementById('user-list');
+  const displayRoomId    = document.getElementById('display-room-id');
+  const btnCopyRoom      = document.getElementById('btn-copy-room');
+  const chatRoomTitle    = document.getElementById('chat-room-title');
+  const typingIndicator  = document.getElementById('typing-indicator');
+  const selfIndicator    = document.getElementById('self-indicator');
+  const btnLeave         = document.getElementById('btn-leave');
+  const toastContainer   = document.getElementById('toast-container');
+  const btnSidebarToggle = document.getElementById('btn-sidebar-toggle');
+  const sidebar          = document.querySelector('.sidebar');
+  const sidebarOverlay   = document.getElementById('sidebar-overlay');
+  const roomTabsEl       = document.getElementById('room-tabs');
+  const btnAddRoom       = document.getElementById('btn-add-room');
+  const addRoomPanel     = document.getElementById('add-room-panel');
+  const inputNewRoom     = document.getElementById('input-new-room');
+  const btnJoinNewRoom   = document.getElementById('btn-join-new-room');
+  const addRoomError     = document.getElementById('add-room-error');
+
+  // ── State ─────────────────────────────────────────────────────────────
+  let socket       = null;
+  let mySocketId   = null;
+  let myUsername   = '';
+  let activeRoomId = '';
+  let typingTimer  = null;
+  let isTyping     = false;
+
+  // Per-room state: roomId -> { nodes: Node[], users: [], unread: 0, typingText: '' }
+  const roomStates = {};
+
+  // ── Avatar colors ──────────────────────────────────────────────────────
+  const AVATAR_COLORS = [
+    '#7c6af7','#f76a8e','#6af7b0','#f7c46a',
+    '#6ac4f7','#f76af0','#a3f76a','#f7956a'
+  ];
+  function avatarColor(str) {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+    return AVATAR_COLORS[h % AVATAR_COLORS.length];
+  }
+  function avatarInitial(name) {
+    return (name || '?').charAt(0).toUpperCase();
+  }
+
+  // ── Utility ────────────────────────────────────────────────────────────
+  function sanitize(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  function formatTime(ts) {
+    const d = new Date(ts);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function randomRoomId() {
+    const words = ['swift','neon','lunar','pixel','crisp','echo','vivid','flux','prism','zen'];
+    const w = words[Math.floor(Math.random() * words.length)];
+    const n = Math.floor(1000 + Math.random() * 9000);
+    return `${w}-${n}`;
+  }
+
+  // ── Toast notifications ────────────────────────────────────────────────
+  function showToast(msg, duration = 3000) {
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.textContent = msg;
+    toastContainer.appendChild(t);
+    setTimeout(() => {
+      t.classList.add('fade-out');
+      setTimeout(() => t.remove(), 320);
+    }, duration);
+  }
+
+  // ── Mobile sidebar toggle ──────────────────────────────────────────────
+  function closeSidebar() {
+    sidebar.classList.remove('open');
+    sidebarOverlay.classList.remove('visible');
+  }
+  btnSidebarToggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    sidebar.classList.toggle('open');
+    sidebarOverlay.classList.toggle('visible');
+  });
+  sidebarOverlay.addEventListener('click', closeSidebar);
+
+  // ── Join screen ────────────────────────────────────────────────────────
+  btnGenRoom.addEventListener('click', () => {
+    inputRoom.value = randomRoomId();
+  });
+
+  btnJoin.addEventListener('click', joinFirstRoom);
+  [inputUsername, inputRoom].forEach(el =>
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') joinFirstRoom(); })
+  );
+
+  function joinFirstRoom() {
+    const username = inputUsername.value.trim();
+    const roomId   = inputRoom.value.trim();
+
+    joinError.textContent = '';
+
+    if (!username) { joinError.textContent = 'Please enter your name.'; return; }
+    if (!roomId)   { joinError.textContent = 'Please enter a room ID.'; return; }
+    if (username.length > 20) { joinError.textContent = 'Name too long (max 20).'; return; }
+    if (!/^[a-zA-Z0-9 _\-]+$/.test(roomId)) {
+      joinError.textContent = 'Room ID may only contain letters, numbers, spaces, - or _.';
+      return;
+    }
+
+    myUsername = username;
+    selfIndicator.textContent = myUsername;
+
+    socket = io();
+    mySocketId = null;
+
+    socket.on('connect', () => {
+      mySocketId = socket.id;
+      _socketJoinRoom(roomId);
+    });
+
+    socket.on('connect_error', () => {
+      joinError.textContent = 'Could not connect to server. Is it running?';
+    });
+
+    setupSocketEvents();
+    showChatScreen(roomId);
+  }
+
+  function _socketJoinRoom(roomId) {
+    const myPublicKeyB64 = E2E.generateKeyPairForRoom(roomId);
+    socket.emit('join-room', { roomId, username: myUsername, publicKey: myPublicKeyB64 });
+  }
+
+  function showChatScreen(firstRoomId) {
+    joinScreen.classList.remove('active');
+    chatScreen.classList.add('active');
+    buildEmojiPicker();
+    buildStickerPicker();
+    _initRoom(firstRoomId);
+    switchRoom(firstRoomId);
+    messageInput.focus();
+  }
+
+  // ── Per-room state management ───────────────────────────────────────────
+  function _initRoom(roomId) {
+    if (roomStates[roomId]) return;
+    roomStates[roomId] = { nodes: [], users: [], unread: 0, typingText: '' };
+    E2E.initRoom(roomId);
+  }
+
+  function switchRoom(roomId) {
+    if (!roomStates[roomId]) return;
+
+    // Stash current room's message nodes
+    if (activeRoomId && activeRoomId !== roomId && roomStates[activeRoomId]) {
+      roomStates[activeRoomId].nodes = Array.from(messagesArea.children)
+        .filter(n => n.id !== 'chat-bg-canvas');
+    }
+
+    activeRoomId = roomId;
+
+    // Clear messages area (keep canvas)
+    Array.from(messagesArea.children).forEach(n => {
+      if (n.id !== 'chat-bg-canvas') messagesArea.removeChild(n);
+    });
+
+    const state = roomStates[roomId];
+    if (state.nodes.length === 0) {
+      messagesArea.appendChild(_buildWelcomeCard());
+    } else {
+      state.nodes.forEach(n => messagesArea.appendChild(n));
+    }
+    messagesArea.scrollTop = messagesArea.scrollHeight;
+
+    state.unread = 0;
+    chatRoomTitle.textContent = roomId;
+    displayRoomId.textContent = roomId;
+    typingIndicator.textContent = state.typingText;
+    renderUserList(state.users);
+    renderRoomTabs();
+  }
+
+  function _buildWelcomeCard() {
+    const div = document.createElement('div');
+    div.className = 'welcome-msg';
+    div.innerHTML = `
+      <div class="welcome-msg-card">
+        <div class="welcome-lock">🔐</div>
+        <div class="welcome-title">End-to-End Encrypted Chat</div>
+        <p class="welcome-sub">Every message is encrypted in your browser before it leaves.<br/>Nobody — not even the server — can read them.</p>
+        <div class="welcome-tags">
+          <span class="welcome-tag">Zero Logs</span>
+          <span class="welcome-tag">No Snooping</span>
+          <span class="welcome-tag">Real-time</span>
+        </div>
+      </div>`;
+    return div;
+  }
+
+  // ── Room tabs ────────────────────────────────────────────────────────────
+  function renderRoomTabs() {
+    roomTabsEl.innerHTML = '';
+    Object.keys(roomStates).forEach(roomId => {
+      const li = document.createElement('li');
+      li.className = 'room-tab' + (roomId === activeRoomId ? ' active' : '');
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'room-tab-name';
+      nameSpan.textContent = roomId;
+
+      const badge = document.createElement('span');
+      badge.className = 'room-tab-badge';
+      const unread = roomStates[roomId].unread;
+      badge.textContent = unread > 99 ? '99+' : String(unread);
+      badge.style.display = unread > 0 ? 'inline-flex' : 'none';
+
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'room-tab-close';
+      closeBtn.title = 'Leave room';
+      closeBtn.textContent = '✕';
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        leaveRoom(roomId);
+      });
+
+      li.appendChild(nameSpan);
+      li.appendChild(badge);
+      li.appendChild(closeBtn);
+      li.addEventListener('click', () => switchRoom(roomId));
+      roomTabsEl.appendChild(li);
+    });
+  }
+
+  // ── Add-room panel ────────────────────────────────────────────────────────
+  btnAddRoom.addEventListener('click', (e) => {
+    e.stopPropagation();
+    addRoomPanel.classList.toggle('hidden');
+    if (!addRoomPanel.classList.contains('hidden')) inputNewRoom.focus();
+  });
+
+  btnJoinNewRoom.addEventListener('click', joinNewRoom);
+  inputNewRoom.addEventListener('keydown', e => { if (e.key === 'Enter') joinNewRoom(); });
+
+  function joinNewRoom() {
+    const roomId = inputNewRoom.value.trim();
+    addRoomError.textContent = '';
+    if (!roomId) { addRoomError.textContent = 'Enter a room ID.'; return; }
+    if (!/^[a-zA-Z0-9 _\-]+$/.test(roomId)) { addRoomError.textContent = 'Invalid room ID.'; return; }
+    if (roomStates[roomId]) { addRoomError.textContent = 'Already in this room.'; return; }
+    _initRoom(roomId);
+    _socketJoinRoom(roomId);
+    inputNewRoom.value = '';
+    addRoomPanel.classList.add('hidden');
+    switchRoom(roomId);
+    showToast(`Joined room: ${roomId}`);
+  }
+
+  // ── Socket events ───────────────────────────────────────────────────────
+  function setupSocketEvents() {
+
+    socket.on('room-peers', ({ roomId, peers }) => {
+      if (!roomStates[roomId]) return;
+      peers.forEach(({ socketId, publicKey }) => {
+        E2E.addPeerKeyForRoom(roomId, socketId, publicKey);
+      });
+    });
+
+    socket.on('peer-joined', ({ socketId, username, publicKey, roomId }) => {
+      if (!roomStates[roomId]) return;
+      E2E.addPeerKeyForRoom(roomId, socketId, publicKey);
+      appendSystemMessage(roomId, `${sanitize(username)} joined the room 🎉`);
+      if (roomId === activeRoomId) showToast(`${username} joined`);
+    });
+
+    socket.on('peer-left', ({ socketId, username, roomId }) => {
+      if (!roomStates[roomId]) return;
+      E2E.removePeerKeyForRoom(roomId, socketId);
+      appendSystemMessage(roomId, `${sanitize(username || 'Someone')} left the room`);
+    });
+
+    socket.on('user-list', ({ roomId, users }) => {
+      if (!roomStates[roomId]) return;
+      roomStates[roomId].users = users;
+      if (roomId === activeRoomId) renderUserList(users);
+    });
+
+    socket.on('receive-message', (payload) => {
+      handleIncomingMessage(payload);
+    });
+
+    socket.on('user-typing', ({ username, isTyping: typing, roomId }) => {
+      if (!roomStates[roomId]) return;
+      const text = typing ? `${username} is typing…` : '';
+      roomStates[roomId].typingText = text;
+      if (roomId === activeRoomId) typingIndicator.textContent = text;
+    });
+
+    socket.on('disconnect', () => {
+      appendSystemMessage(activeRoomId, 'Disconnected from server.');
+    });
+  }
+
+  // ── Sending messages ────────────────────────────────────────────────────
+  function sendMessage(text, type = 'text') {
+    if (!text.trim() && type === 'text') return;
+    const roomId    = activeRoomId;
+    const peers     = E2E.getAllPeerIdsForRoom(roomId);
+    const timestamp = Date.now();
+    const msgId     = Math.random().toString(36).slice(2);
+
+    appendMessage(roomId, { from: mySocketId, fromUsername: myUsername, text, messageType: type, timestamp, self: true });
+
+    if (peers.length === 0) return;
+
+    peers.forEach(peerId => {
+      let encrypted;
+      try { encrypted = E2E.encryptForInRoom(roomId, peerId, text); } catch { return; }
+      socket.emit('send-message', {
+        roomId, to: peerId,
+        encryptedMessage: encrypted.encryptedMessage,
+        nonce: encrypted.nonce,
+        messageType: type, timestamp, msgId, skipEcho: true
+      });
+    });
+  }
+
+  function handleIncomingMessage(payload) {
+    const { from, fromUsername, encryptedMessage, nonce, messageType, timestamp, self: isSelf, roomId } = payload;
+    if (isSelf) return;
+    if (!roomStates[roomId]) return;
+    const text = E2E.decryptInRoom(roomId, encryptedMessage, nonce, from);
+    if (text === null) return;
+    appendMessage(roomId, { from, fromUsername, text, messageType: messageType || 'text', timestamp, self: false });
+  }
+
+  // ── Render ──────────────────────────────────────────────────────────────
+  function appendMessage(roomId, { from, fromUsername, text, messageType, timestamp, self: isSelf }) {
+    const isActive = roomId === activeRoomId;
+    const state = roomStates[roomId];
+    if (!state) return;
+
+    // Remove welcome card when first message arrives
+    if (isActive) {
+      const welcome = messagesArea.querySelector('.welcome-msg');
+      if (welcome) welcome.remove();
+    } else {
+      const idx = state.nodes.findIndex(n => n.classList && n.classList.contains('welcome-msg'));
+      if (idx !== -1) state.nodes.splice(idx, 1);
+    }
+
+    const row = document.createElement('div');
+    row.className = `msg-row ${isSelf ? 'self' : 'other'}`;
+
+    const meta = document.createElement('div');
+    meta.className = 'msg-meta';
+
+    const author = document.createElement('span');
+    author.className = 'msg-author';
+    author.textContent = isSelf ? 'You' : sanitize(fromUsername || 'Unknown');
+
+    const time = document.createElement('span');
+    time.className = 'msg-time';
+    time.textContent = formatTime(timestamp || Date.now());
+
+    meta.appendChild(author);
+    meta.appendChild(time);
+
+    const bubble = document.createElement('div');
+    bubble.className = messageType === 'sticker' ? 'msg-bubble sticker' : 'msg-bubble';
+    bubble.textContent = text;
+
+    row.appendChild(meta);
+    row.appendChild(bubble);
+
+    if (isActive) {
+      messagesArea.appendChild(row);
+      messagesArea.scrollTop = messagesArea.scrollHeight;
+    } else {
+      state.nodes.push(row);
+      if (!isSelf) { state.unread++; renderRoomTabs(); }
+    }
+  }
+
+  function appendSystemMessage(roomId, html) {
+    const state = roomStates[roomId];
+    if (!state) return;
+    const div = document.createElement('div');
+    div.className = 'sys-msg';
+    div.innerHTML = html;
+    if (roomId === activeRoomId) {
+      messagesArea.appendChild(div);
+      messagesArea.scrollTop = messagesArea.scrollHeight;
+    } else {
+      state.nodes.push(div);
+    }
+  }
+
+  function renderUserList(users) {
+    userListEl.innerHTML = '';
+    users.forEach(({ socketId, username }) => {
+      const li = document.createElement('li');
+      if (socketId === mySocketId) li.classList.add('self-user');
+
+      const av = document.createElement('span');
+      av.className = 'avatar';
+      av.textContent = avatarInitial(username);
+      av.style.background = avatarColor(username);
+      av.style.color = '#fff';
+
+      const name = document.createElement('span');
+      name.textContent = socketId === mySocketId ? `${username} (you)` : username;
+
+      const dot = document.createElement('span');
+      dot.className = 'u-dot';
+
+      li.appendChild(av);
+      li.appendChild(name);
+      li.appendChild(dot);
+      userListEl.appendChild(li);
+    });
+  }
+
+  // ── Input / send handlers ───────────────────────────────────────────────
+  btnSend.addEventListener('click', () => {
+    const text = messageInput.value;
+    sendMessage(text, 'text');
+    messageInput.value = '';
+    autoResizeTextarea();
+    stopTyping();
+  });
+
+  messageInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      const text = messageInput.value;
+      sendMessage(text, 'text');
+      messageInput.value = '';
+      autoResizeTextarea();
+      stopTyping();
+    }
+  });
+
+  messageInput.addEventListener('input', () => {
+    autoResizeTextarea();
+    if (!isTyping) {
+      isTyping = true;
+      socket && socket.emit('typing', { roomId: activeRoomId, isTyping: true });
+    }
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(stopTyping, 1500);
+  });
+
+  function stopTyping() {
+    if (isTyping) {
+      isTyping = false;
+      socket && socket.emit('typing', { roomId: activeRoomId, isTyping: false });
+    }
+    clearTimeout(typingTimer);
+  }
+
+  function autoResizeTextarea() {
+    messageInput.style.height = 'auto';
+    messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px';
+  }
+
+  // ── Emoji picker ────────────────────────────────────────────────────────
+  function buildEmojiPicker() {
+    emojiPicker.innerHTML = '';
+    EMOJIS.forEach(({ category, emojis }) => {
+      const label = document.createElement('span');
+      label.className = 'ep-category';
+      label.textContent = category;
+      emojiPicker.appendChild(label);
+
+      emojis.forEach(em => {
+        const btn = document.createElement('button');
+        btn.textContent = em;
+        btn.title = em;
+        btn.addEventListener('click', () => {
+          messageInput.value += em;
+          messageInput.focus();
+          autoResizeTextarea();
+        });
+        emojiPicker.appendChild(btn);
+      });
+    });
+  }
+
+  btnEmoji.addEventListener('click', (e) => {
+    e.stopPropagation();
+    emojiPicker.classList.toggle('hidden');
+    stickerPicker.classList.add('hidden');
+    btnEmoji.classList.toggle('active', !emojiPicker.classList.contains('hidden'));
+    btnSticker.classList.remove('active');
+  });
+
+  // ── Sticker picker ──────────────────────────────────────────────────────
+  function buildStickerPicker() {
+    stickerPicker.innerHTML = '';
+    STICKER_PACKS.forEach(({ name, stickers }) => {
+      const label = document.createElement('div');
+      label.className = 'sticker-cat-label';
+      label.textContent = name;
+      stickerPicker.appendChild(label);
+
+      const grid = document.createElement('div');
+      grid.className = 'sticker-grid';
+
+      stickers.forEach(sticker => {
+        const btn = document.createElement('button');
+        btn.className = 'sticker-btn';
+        btn.textContent = sticker;
+        btn.addEventListener('click', () => {
+          sendMessage(sticker, 'sticker');
+          stickerPicker.classList.add('hidden');
+          btnSticker.classList.remove('active');
+        });
+        grid.appendChild(btn);
+      });
+
+      stickerPicker.appendChild(grid);
+    });
+  }
+
+  btnSticker.addEventListener('click', (e) => {
+    e.stopPropagation();
+    stickerPicker.classList.toggle('hidden');
+    emojiPicker.classList.add('hidden');
+    btnSticker.classList.toggle('active', !stickerPicker.classList.contains('hidden'));
+    btnEmoji.classList.remove('active');
+  });
+
+  // Close pickers and add-room panel on outside click
+  document.addEventListener('click', (e) => {
+    if (!emojiPicker.contains(e.target) && e.target !== btnEmoji) {
+      emojiPicker.classList.add('hidden');
+      btnEmoji.classList.remove('active');
+    }
+    if (!stickerPicker.contains(e.target) && e.target !== btnSticker) {
+      stickerPicker.classList.add('hidden');
+      btnSticker.classList.remove('active');
+    }
+    if (!addRoomPanel.contains(e.target) && e.target !== btnAddRoom) {
+      addRoomPanel.classList.add('hidden');
+    }
+  });
+
+  // ── Copy room ID ────────────────────────────────────────────────────────
+  btnCopyRoom.addEventListener('click', () => {
+    navigator.clipboard.writeText(activeRoomId)
+      .then(() => showToast('Room ID copied!'))
+      .catch(() => showToast('Could not copy — try manually.'));
+  });
+
+  // ── Leave room ──────────────────────────────────────────────────────────
+  btnLeave.addEventListener('click', () => leaveRoom(activeRoomId));
+
+  function leaveRoom(roomId) {
+    if (!roomStates[roomId]) return;
+    if (socket) socket.emit('leave-room', { roomId });
+    E2E.destroyRoom(roomId);
+    delete roomStates[roomId];
+
+    const remaining = Object.keys(roomStates);
+    if (remaining.length === 0) {
+      // Last room — disconnect and return to join screen
+      if (socket) { socket.disconnect(); socket = null; }
+      chatScreen.classList.remove('active');
+      joinScreen.classList.add('active');
+      _resetMessagesArea();
+      userListEl.innerHTML = '';
+      typingIndicator.textContent = '';
+      messageInput.value = '';
+      activeRoomId = '';
+      myUsername = '';
+      mySocketId = null;
+      roomTabsEl.innerHTML = '';
+    } else {
+      const next = activeRoomId === roomId ? remaining[0] : activeRoomId;
+      activeRoomId = '';
+      switchRoom(next);
+      showToast(`Left room: ${roomId}`);
+    }
+  }
+
+  function _resetMessagesArea() {
+    messagesArea.innerHTML = `
+      <canvas id="chat-bg-canvas" aria-hidden="true"></canvas>
+      <div class="welcome-msg">
+        <div class="welcome-msg-card">
+          <div class="welcome-lock">🔐</div>
+          <div class="welcome-title">End-to-End Encrypted Chat</div>
+          <p class="welcome-sub">Every message is encrypted in your browser before it leaves.<br/>Nobody — not even the server — can read them.</p>
+          <div class="welcome-tags">
+            <span class="welcome-tag">Zero Logs</span>
+            <span class="welcome-tag">No Snooping</span>
+            <span class="welcome-tag">Real-time</span>
+          </div>
+        </div>
+      </div>`;
+    initChatCanvas();
+  }
+
+  // ── 3D Card Tilt Effect ───────────────────────────────────────────────
+  (function () {
+    const card = document.querySelector('.join-card');
+    if (!card) return;
+    const TILT = 10;
+    joinScreen.addEventListener('mousemove', (e) => {
+      const r   = card.getBoundingClientRect();
+      const cx  = r.left + r.width  / 2;
+      const cy  = r.top  + r.height / 2;
+      const dx  = (e.clientX - cx) / (window.innerWidth  / 2);
+      const dy  = (e.clientY - cy) / (window.innerHeight / 2);
+      const rx  = (-dy * TILT).toFixed(2);
+      const ry  = ( dx * TILT).toFixed(2);
+      card.style.transform = `perspective(900px) rotateX(${rx}deg) rotateY(${ry}deg) translateZ(6px)`;
+      const sx = (-dx * 18).toFixed(1);
+      const sy = ( dy * 18 + 22).toFixed(1);
+      const glow = (Math.abs(dx) + Math.abs(dy)) * 0.12;
+      card.style.boxShadow = `${sx}px ${sy}px 60px rgba(0,0,0,0.6), 0 8px 24px rgba(0,0,0,0.35), 0 0 40px rgba(0,212,170,${glow.toFixed(2)})`;
+    });
+    joinScreen.addEventListener('mouseleave', () => {
+      card.style.transform  = '';
+      card.style.boxShadow  = '';
+    });
+  })();
+
+  // ── Particle Constellation Canvas ──────────────────────────────────────
+  function initChatCanvas() {
+    const canvas = document.getElementById('chat-bg-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const TEAL   = '0,212,170';
+    const BLUE   = '0,150,255';
+    const N      = 62;
+    const LINK   = 140;
+    let w, h, particles = [], raf = null;
+    const mouse  = { x: null, y: null };
+
+    function resize() {
+      w = canvas.width  = canvas.offsetWidth;
+      h = canvas.height = canvas.offsetHeight;
+    }
+
+    class P {
+      constructor() { this.init(); }
+      init() {
+        this.x  = Math.random() * w;
+        this.y  = Math.random() * h;
+        this.vx = (Math.random() - 0.5) * 0.35;
+        this.vy = (Math.random() - 0.5) * 0.35;
+        this.r  = 1.2 + Math.random() * 1.6;
+        this.op = 0.25 + Math.random() * 0.45;
+        this.col = Math.random() > 0.35 ? TEAL : BLUE;
+      }
+      step() {
+        // subtle mouse attraction
+        if (mouse.x !== null) {
+          const dx = mouse.x - this.x, dy = mouse.y - this.y;
+          const d  = Math.sqrt(dx * dx + dy * dy);
+          if (d < 160) {
+            this.vx += dx / d * 0.018;
+            this.vy += dy / d * 0.018;
+          }
+        }
+        // dampen & clamp speed
+        this.vx *= 0.985;
+        this.vy *= 0.985;
+        const spd = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+        if (spd > 1.4) { this.vx = this.vx / spd * 1.4; this.vy = this.vy / spd * 1.4; }
+        this.x += this.vx;
+        this.y += this.vy;
+        if (this.x < 0) this.x = w;
+        if (this.x > w) this.x = 0;
+        if (this.y < 0) this.y = h;
+        if (this.y > h) this.y = 0;
+      }
+      draw() {
+        // outer halo
+        const g = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.r * 3.5);
+        g.addColorStop(0,   `rgba(${this.col},${(this.op * 0.9).toFixed(2)})`);
+        g.addColorStop(0.5, `rgba(${this.col},${(this.op * 0.3).toFixed(2)})`);
+        g.addColorStop(1,   `rgba(${this.col},0)`);
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.r * 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = g;
+        ctx.fill();
+        // core dot
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${this.col},${this.op.toFixed(2)})`;
+        ctx.fill();
+      }
+    }
+
+    function drawLinks() {
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const a = particles[i], b = particles[j];
+          const dx = a.x - b.x, dy = a.y - b.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < LINK) {
+            const alpha = (1 - dist / LINK) * 0.22;
+            const col   = a.col === TEAL ? TEAL : BLUE;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.strokeStyle = `rgba(${col},${alpha.toFixed(3)})`;
+            ctx.lineWidth = 0.8;
+            ctx.stroke();
+          }
+        }
+      }
+    }
+
+    // Mouse proximity highlight beam
+    function drawMouseBeam() {
+      if (mouse.x === null) return;
+      for (let i = 0; i < particles.length; i++) {
+        const p    = particles[i];
+        const dx   = p.x - mouse.x, dy = p.y - mouse.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 100) {
+          const alpha = (1 - dist / 100) * 0.35;
+          ctx.beginPath();
+          ctx.moveTo(mouse.x, mouse.y);
+          ctx.lineTo(p.x, p.y);
+          ctx.strokeStyle = `rgba(${TEAL},${alpha.toFixed(3)})`;
+          ctx.lineWidth = 0.7;
+          ctx.stroke();
+        }
+      }
+    }
+
+    function loop() {
+      ctx.clearRect(0, 0, w, h);
+      drawLinks();
+      drawMouseBeam();
+      for (const p of particles) { p.step(); p.draw(); }
+      raf = requestAnimationFrame(loop);
+    }
+
+    function start() {
+      if (raf) cancelAnimationFrame(raf);
+      resize();
+      particles = Array.from({ length: N }, () => new P());
+      loop();
+    }
+
+    const resizeObs = new ResizeObserver(() => {
+      resize();
+      for (const p of particles) {
+        p.x = Math.min(p.x, w);
+        p.y = Math.min(p.y, h);
+      }
+    });
+    resizeObs.observe(canvas.parentElement);
+
+    const msgArea = document.getElementById('messages');
+    if (msgArea) {
+      msgArea.addEventListener('mousemove', (e) => {
+        const r = canvas.getBoundingClientRect();
+        mouse.x = e.clientX - r.left;
+        mouse.y = e.clientY - r.top;
+      });
+      msgArea.addEventListener('mouseleave', () => { mouse.x = null; mouse.y = null; });
+    }
+
+    start();
+  }
+
+  initChatCanvas();
+
+})();
