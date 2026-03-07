@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="112" fill="#06101b"/>
+  <!-- Gradient defs -->
+  <defs>
+    <radialGradient id="bg-glow" cx="50%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#00d4aa" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#06101b" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bubble-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00e2b8"/>
+      <stop offset="100%" stop-color="#009e7e"/>
+    </linearGradient>
+    <linearGradient id="lock-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#b2fff0"/>
+    </linearGradient>
+  </defs>
+  <!-- Glow overlay -->
+  <rect width="512" height="512" rx="112" fill="url(#bg-glow)"/>
+  <!-- Chat bubble -->
+  <path d="M120 150 Q120 110 160 110 L352 110 Q392 110 392 150 L392 300 Q392 340 352 340 L290 340 L256 390 L222 340 L160 340 Q120 340 120 300 Z"
+        fill="url(#bubble-grad)" opacity="0.95"/>
+  <!-- Lock body -->
+  <rect x="220" y="220" width="72" height="60" rx="10" fill="url(#lock-grad)"/>
+  <!-- Lock shackle -->
+  <path d="M238 220 L238 198 Q238 168 256 168 Q274 168 274 198 L274 220"
+        fill="none" stroke="url(#lock-grad)" stroke-width="14" stroke-linecap="round"/>
+  <!-- Lock keyhole -->
+  <circle cx="256" cy="247" r="10" fill="#06101b" opacity="0.7"/>
+  <rect x="250" y="247" width="12" height="16" rx="3" fill="#06101b" opacity="0.7"/>
+</svg>
