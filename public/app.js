@@ -52,12 +52,15 @@
   const SESSION_KEY = 'livechat_session';
   function saveSession() {
     try {
+      if (!myUsername || Object.keys(roomStates).length === 0) return;
       localStorage.setItem(SESSION_KEY, JSON.stringify({
         username: myUsername,
         rooms: Object.keys(roomStates)
       }));
     } catch (e) {}
   }
+  // Always save right before page closes / refreshes
+  window.addEventListener('beforeunload', saveSession);
   function clearSession() {
     try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
   }
@@ -837,10 +840,8 @@
     });
 
     socket.on('connect_error', () => {
-      // Auto-rejoin failed — fall back to join screen
-      clearSession();
-      chatScreen.classList.remove('active');
-      joinScreen.classList.add('active');
+      // Socket.io will auto-retry — just show a toast; keep session intact
+      showToast('Reconnecting…');
     });
 
     setupSocketEvents();
