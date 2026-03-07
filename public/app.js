@@ -25,9 +25,11 @@
   const selfIndicator    = document.getElementById('self-indicator');
   const btnLeave         = document.getElementById('btn-leave');
   const toastContainer   = document.getElementById('toast-container');
-  const btnSidebarToggle = document.getElementById('btn-sidebar-toggle');
-  const sidebar          = document.querySelector('.sidebar');
-  const sidebarOverlay   = document.getElementById('sidebar-overlay');
+  const btnSidebarToggle  = document.getElementById('btn-sidebar-toggle');
+  const btnSidebarClose   = document.getElementById('btn-sidebar-close');
+  const memberCountBadge  = document.getElementById('member-count-badge');
+  const sidebar           = document.querySelector('.sidebar');
+  const sidebarOverlay    = document.getElementById('sidebar-overlay');
   const roomTabsEl       = document.getElementById('room-tabs');
   const btnAddRoom       = document.getElementById('btn-add-room');
   const addRoomPanel     = document.getElementById('add-room-panel');
@@ -45,6 +47,26 @@
 
   // Per-room state: roomId -> { nodes: Node[], users: [], unread: 0, typingText: '' }
   const roomStates = {};
+
+  // ── Session persistence (localStorage) ────────────────────────────────
+  const SESSION_KEY = 'livechat_session';
+  function saveSession() {
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify({
+        username: myUsername,
+        rooms: Object.keys(roomStates)
+      }));
+    } catch (e) {}
+  }
+  function clearSession() {
+    try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+  }
+  function loadSession() {
+    try {
+      const raw = localStorage.getItem(SESSION_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  }
 
   // ── Avatar colors ──────────────────────────────────────────────────────
   const AVATAR_COLORS = [
@@ -101,6 +123,7 @@
     sidebar.classList.toggle('open');
     sidebarOverlay.classList.toggle('visible');
   });
+  btnSidebarClose.addEventListener('click', closeSidebar);
   sidebarOverlay.addEventListener('click', closeSidebar);
 
   // ── Join screen ────────────────────────────────────────────────────────
@@ -144,6 +167,7 @@
 
     setupSocketEvents();
     showChatScreen(roomId);
+    saveSession();
   }
 
   function _socketJoinRoom(roomId) {
@@ -272,6 +296,7 @@
     inputNewRoom.value = '';
     addRoomPanel.classList.add('hidden');
     switchRoom(roomId);
+    saveSession();
     showToast(`Joined room: ${roomId}`);
   }
 
@@ -417,6 +442,7 @@
 
   function renderUserList(users) {
     userListEl.innerHTML = '';
+    if (memberCountBadge) memberCountBadge.textContent = users.length;
     users.forEach(({ socketId, username }) => {
       const li = document.createElement('li');
       if (socketId === mySocketId) li.classList.add('self-user');
@@ -583,7 +609,8 @@
 
     const remaining = Object.keys(roomStates);
     if (remaining.length === 0) {
-      // Last room — disconnect and return to join screen
+      // Last room — disconnect, clear session, return to join screen
+      clearSession();
       if (socket) { socket.disconnect(); socket = null; }
       chatScreen.classList.remove('active');
       joinScreen.classList.add('active');
@@ -599,6 +626,7 @@
       const next = activeRoomId === roomId ? remaining[0] : activeRoomId;
       activeRoomId = '';
       switchRoom(next);
+      saveSession();
       showToast(`Left room: ${roomId}`);
     }
   }
@@ -791,5 +819,42 @@
   }
 
   initChatCanvas();
+
+  // ── Auto-rejoin on refresh ─────────────────────────────────────────────
+  (function autoRejoin() {
+    const session = loadSession();
+    if (!session || !session.username || !Array.isArray(session.rooms) || session.rooms.length === 0) return;
+
+    myUsername = session.username;
+    selfIndicator.textContent = myUsername;
+
+    socket = io();
+    mySocketId = null;
+
+    socket.on('connect', () => {
+      mySocketId = socket.id;
+      session.rooms.forEach(roomId => _socketJoinRoom(roomId));
+    });
+
+    socket.on('connect_error', () => {
+      // Auto-rejoin failed — fall back to join screen
+      clearSession();
+      chatScreen.classList.remove('active');
+      joinScreen.classList.add('active');
+    });
+
+    setupSocketEvents();
+
+    // Init all rooms so tabs render correctly
+    session.rooms.forEach(roomId => _initRoom(roomId));
+
+    // Show chat screen directly (no join screen)
+    joinScreen.classList.remove('active');
+    chatScreen.classList.add('active');
+    buildEmojiPicker();
+    buildStickerPicker();
+    switchRoom(session.rooms[0]);
+    messageInput.focus();
+  })();
 
 })();

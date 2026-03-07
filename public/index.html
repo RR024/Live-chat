@@ -51,6 +51,7 @@
         <span class="logo-icon">💬</span>
         <span class="sidebar-title">LiveChat</span>
         <span class="logo-badge">E2E</span>
+        <button id="btn-sidebar-close" class="sidebar-close-btn" title="Close">✕</button>
       </div>
 
       <!-- Rooms section -->
@@ -86,7 +87,10 @@
     <main class="chat-main">
       <header class="chat-header">
         <div class="chat-header-left">
-          <button id="btn-sidebar-toggle" title="Toggle members">☰</button>
+          <button id="btn-sidebar-toggle" title="Toggle members">
+            <span class="toggle-icon">☰</span>
+            <span id="member-count-badge" class="member-count-badge">0</span>
+          </button>
           <span id="chat-room-title" class="chat-room-title"></span>
           <span class="enc-badge">🔒 End-to-End Encrypted</span>
         </div>
