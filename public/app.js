@@ -1211,6 +1211,76 @@
   btnMeetLeave.addEventListener('click', leaveMeet);
   btnMeetMin.addEventListener('click', () => meetOverlay.classList.add('hidden'));
 
+  // ── Emoji Reactions Soundboard ────────────────────────────────────────
+  const btnMeetReact  = document.getElementById('btn-meet-react');
+  const meetReactTray = document.getElementById('meet-react-tray');
+  const meetBurst     = document.getElementById('meet-burst');
+  let reactTrayOpen   = false;
+
+  function _fireEmoji(emoji, senderName) {
+    const el = document.createElement('div');
+    el.className = 'flying-emoji';
+    const dur  = (2.4 + Math.random() * 0.8).toFixed(2) + 's';
+    const x    = 10 + Math.random() * 80; // % from left
+    const tilt1 = (Math.random() * 20 - 10).toFixed(1) + 'deg';
+    const tilt2 = (Math.random() * 20 - 10).toFixed(1) + 'deg';
+    const tilt3 = (Math.random() * 24 - 12).toFixed(1) + 'deg';
+    el.style.setProperty('--dur',   dur);
+    el.style.setProperty('--tilt1', tilt1);
+    el.style.setProperty('--tilt2', tilt2);
+    el.style.setProperty('--tilt3', tilt3);
+    el.style.left = x + '%';
+    el.textContent = emoji;
+    if (senderName) {
+      const name = document.createElement('span');
+      name.className = 'flying-emoji-name';
+      name.textContent = senderName;
+      el.appendChild(name);
+    }
+    meetBurst.appendChild(el);
+    el.addEventListener('animationend', () => el.remove(), { once: true });
+  }
+
+  function _sendReaction(emoji) {
+    if (!meetActive || !meetRoomId) return;
+    _fireEmoji(emoji, null); // local: no name tag
+    socket.emit('meet-reaction', { roomId: meetRoomId, emoji });
+  }
+
+  // Toggle reaction tray
+  btnMeetReact.addEventListener('click', (e) => {
+    e.stopPropagation();
+    reactTrayOpen = !reactTrayOpen;
+    meetReactTray.classList.toggle('hidden', !reactTrayOpen);
+    btnMeetReact.classList.toggle('active', reactTrayOpen);
+  });
+
+  // Close tray when clicking outside
+  document.addEventListener('click', (e) => {
+    if (reactTrayOpen && !meetReactTray.contains(e.target) && e.target !== btnMeetReact) {
+      reactTrayOpen = false;
+      meetReactTray.classList.add('hidden');
+      btnMeetReact.classList.remove('active');
+    }
+  });
+
+  // Emoji tray button clicks
+  meetReactTray.addEventListener('click', (e) => {
+    const btn = e.target.closest('.react-emoji-btn');
+    if (!btn) return;
+    const emoji = btn.dataset.emoji;
+    _sendReaction(emoji);
+    // Pulse the button
+    btn.style.transform = 'scale(1.4)';
+    setTimeout(() => { btn.style.transform = ''; }, 180);
+  });
+
+  // Incoming reactions from other participants
+  socket.on('meet-reaction', ({ emoji, username }) => {
+    if (!meetActive) return;
+    _fireEmoji(emoji, username);
+  });
+
   // ── Auto-rejoin on refresh ─────────────────────────────────────────────
   (function autoRejoin() {
     const session = loadSession();

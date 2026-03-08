@@ -189,11 +189,29 @@
       <button id="btn-meet-pip" class="meet-ctrl-btn" title="Picture in Picture">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><rect x="12" y="11" width="8" height="5" rx="1" ry="1" fill="currentColor" stroke="none"/></svg>
       </button>
+      <button id="btn-meet-react" class="meet-ctrl-btn" title="Send Reaction">
+        <span style="font-size:18px;line-height:1">😊</span>
+      </button>
       <div class="meet-ctrl-divider"></div>
       <button id="btn-meet-leave" class="meet-ctrl-btn meet-leave-btn" title="Leave Call">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="22" height="22"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07C9.44 17.29 7.76 15.06"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
       </button>
     </div>
+
+    <!-- Emoji reaction tray -->
+    <div id="meet-react-tray" class="meet-react-tray hidden">
+      <button class="react-emoji-btn" data-emoji="👍">👍</button>
+      <button class="react-emoji-btn" data-emoji="❤️">❤️</button>
+      <button class="react-emoji-btn" data-emoji="😂">😂</button>
+      <button class="react-emoji-btn" data-emoji="🎉">🎉</button>
+      <button class="react-emoji-btn" data-emoji="😮">😮</button>
+      <button class="react-emoji-btn" data-emoji="👏">👏</button>
+      <button class="react-emoji-btn" data-emoji="🔥">🔥</button>
+      <button class="react-emoji-btn" data-emoji="💯">💯</button>
+    </div>
+
+    <!-- Flying emoji burst layer -->
+    <div id="meet-burst" class="meet-burst"></div>
   </div>
 
   <!-- Toast notifications -->

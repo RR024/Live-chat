@@ -879,6 +879,96 @@ textarea#message-input::placeholder { color: var(--text-muted); }
 }
 
 /* =============================================
+   MEET EMOJI REACTIONS
+   ============================================= */
+
+/* Reaction tray popup above controls */
+.meet-react-tray {
+  position: absolute;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  padding: 10px 14px;
+  background: rgba(12,20,34,0.92);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 50px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.55);
+  backdrop-filter: blur(18px);
+  z-index: 20;
+  animation: trayPop 0.18s cubic-bezier(0.34,1.56,0.64,1);
+}
+.meet-react-tray.hidden { display: none !important; }
+@keyframes trayPop {
+  from { opacity: 0; transform: translateX(-50%) scale(0.75) translateY(12px); }
+  to   { opacity: 1; transform: translateX(-50%) scale(1)    translateY(0); }
+}
+
+.react-emoji-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255,255,255,0.06);
+  font-size: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, transform 0.12s;
+  line-height: 1;
+}
+.react-emoji-btn:hover {
+  background: rgba(255,255,255,0.14);
+  transform: scale(1.22) translateY(-2px);
+}
+.react-emoji-btn:active { transform: scale(0.92); }
+
+/* Burst layer inside meet-overlay */
+.meet-burst {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 15;
+}
+
+/* Each flying emoji */
+.flying-emoji {
+  position: absolute;
+  bottom: 80px;
+  font-size: 36px;
+  line-height: 1;
+  pointer-events: none;
+  animation: emojiFloat var(--dur, 2.8s) cubic-bezier(0.25,0.46,0.45,0.94) forwards;
+  will-change: transform, opacity;
+  user-select: none;
+}
+@keyframes emojiFloat {
+  0%   { opacity: 1;   transform: translateY(0)    scale(1)    rotate(0deg); }
+  15%  { opacity: 1;   transform: translateY(-60px) scale(1.35) rotate(var(--tilt1, 8deg)); }
+  60%  { opacity: 0.9; transform: translateY(-240px) scale(1.1) rotate(var(--tilt2, -5deg)); }
+  100% { opacity: 0;   transform: translateY(-480px) scale(0.7) rotate(var(--tilt3, 12deg)); }
+}
+
+/* Name tag under flying emoji */
+.flying-emoji-name {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%) translateY(100%);
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(0,0,0,0.55);
+  border-radius: 8px;
+  padding: 1px 6px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* =============================================
    PiP CHAT POPUP
    ============================================= */
 .pip-chat {

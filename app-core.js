@@ -152,6 +152,12 @@ io.on('connection', (socket) => {
     io.to(to).emit('webrtc-ice', { from: socket.id, candidate, roomId });
   });
 
+  socket.on('meet-reaction', ({ roomId, emoji }) => {
+    if (!roomId || !rooms[roomId]?.meet?.users[socket.id]) return;
+    if (typeof emoji !== 'string' || emoji.length > 8) return;
+    socket.to(roomId).emit('meet-reaction', { from: socket.id, username: socket.username, emoji, roomId });
+  });
+
   socket.on('disconnect', () => {
     socket.roomIds.forEach(roomId => _leaveRoom(socket, roomId));
   });
