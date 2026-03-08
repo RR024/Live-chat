@@ -429,6 +429,14 @@
       state.nodes.push(row);
       if (!isSelf) { state.unread++; renderRoomTabs(); }
     }
+
+    // Mirror into pip chat if open
+    if (typeof pipOpen !== 'undefined' && pipOpen && roomId === activeRoomId) {
+      const welcome = pipMessages.querySelector('.welcome-msg');
+      if (welcome) welcome.remove();
+      pipMessages.appendChild(row.cloneNode(true));
+      pipMessages.scrollTop = pipMessages.scrollHeight;
+    }
   }
 
   function appendSystemMessage(roomId, html) {
@@ -1083,25 +1091,122 @@
     });
   }
 
-  async function togglePiP() {
-    if (!meetActive) return;
-    try {
-      if (document.pictureInPictureElement) {
-        await document.exitPictureInPicture();
-        btnMeetPip.classList.remove('active');
-      } else {
-        const vid = document.querySelector('#mti-local video');
-        if (!vid) { showToast('No video available for PiP.'); return; }
-        await vid.requestPictureInPicture();
-        btnMeetPip.classList.add('active');
-        vid.addEventListener('leavepictureinpicture', () => {
-          btnMeetPip.classList.remove('active');
-        }, { once: true });
-      }
-    } catch {
-      showToast('Picture-in-Picture is not supported in this browser.');
-    }
+  // ── PiP Chat Popup ────────────────────────────────────────────────
+  const pipChat        = document.getElementById('pip-chat');
+  const pipMessages    = document.getElementById('pip-messages');
+  const pipRoomName    = document.getElementById('pip-room-name');
+  const pipInput       = document.getElementById('pip-message-input');
+  const btnPipSend     = document.getElementById('btn-pip-send');
+  const btnPipExpand   = document.getElementById('btn-pip-expand');
+  let   pipOpen        = false;
+
+  // Sync a clone of a message node into pip messages
+  function _pipAppend(node) {
+    if (!pipOpen) return;
+    const clone = node.cloneNode(true);
+    pipMessages.appendChild(clone);
+    pipMessages.scrollTop = pipMessages.scrollHeight;
   }
+
+  // Load existing messages into pip
+  function _pipLoadMessages() {
+    pipMessages.innerHTML = '';
+    const state = roomStates[activeRoomId];
+    if (!state) return;
+    state.nodes.forEach(n => {
+      const clone = n.cloneNode(true);
+      pipMessages.appendChild(clone);
+    });
+    pipMessages.scrollTop = pipMessages.scrollHeight;
+  }
+
+  function openPip() {
+    pipOpen = true;
+    pipRoomName.textContent = activeRoomId;
+    _pipLoadMessages();
+    meetOverlay.classList.add('hidden');
+    pipChat.classList.remove('hidden');
+    pipInput.focus();
+    btnMeetPip.classList.add('active');
+  }
+
+  function closePip() {
+    pipOpen = false;
+    pipChat.classList.add('hidden');
+    if (meetActive) meetOverlay.classList.remove('hidden');
+    btnMeetPip.classList.remove('active');
+  }
+
+  function togglePiP() {
+    if (!meetActive) return;
+    if (pipOpen) closePip(); else openPip();
+  }
+
+  // Send from pip input
+  function _pipSend() {
+    const text = pipInput.value.trim();
+    if (!text) return;
+    sendMessage(text, 'text');
+    pipInput.value = '';
+    pipInput.style.height = 'auto';
+  }
+
+  btnPipSend.addEventListener('click', _pipSend);
+  pipInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      _pipSend();
+    }
+  });
+  pipInput.addEventListener('input', () => {
+    pipInput.style.height = 'auto';
+    pipInput.style.height = Math.min(pipInput.scrollHeight, 80) + 'px';
+  });
+
+  btnPipExpand.addEventListener('click', closePip);
+
+  // Draggable pip window
+  ;(function makeDraggable() {
+    const handle = document.getElementById('pip-drag-handle');
+    let dragging = false, ox = 0, oy = 0;
+    handle.addEventListener('mousedown', (e) => {
+      if (e.target.closest('button')) return;
+      dragging = true;
+      const r = pipChat.getBoundingClientRect();
+      ox = e.clientX - r.left;
+      oy = e.clientY - r.top;
+      pipChat.style.transition = 'none';
+      pipChat.style.right = 'auto';
+      pipChat.style.bottom = 'auto';
+    });
+    document.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      pipChat.style.left = (e.clientX - ox) + 'px';
+      pipChat.style.top  = (e.clientY - oy) + 'px';
+    });
+    document.addEventListener('mouseup', () => {
+      dragging = false;
+      pipChat.style.transition = '';
+    });
+    // Touch drag
+    handle.addEventListener('touchstart', (e) => {
+      if (e.target.closest('button')) return;
+      const t = e.touches[0];
+      dragging = true;
+      const r = pipChat.getBoundingClientRect();
+      ox = t.clientX - r.left;
+      oy = t.clientY - r.top;
+      pipChat.style.right = 'auto';
+      pipChat.style.bottom = 'auto';
+    }, { passive: true });
+    document.addEventListener('touchmove', (e) => {
+      if (!dragging) return;
+      const t = e.touches[0];
+      pipChat.style.left = (t.clientX - ox) + 'px';
+      pipChat.style.top  = (t.clientY - oy) + 'px';
+    }, { passive: true });
+    document.addEventListener('touchend', () => { dragging = false; });
+  })();
 
   btnMeetJoin.addEventListener('click', joinMeet);
   btnMeetMic.addEventListener('click', toggleMeetMic);

@@ -199,6 +199,26 @@
   <!-- Toast notifications -->
   <div id="toast-container" class="toast-container"></div>
 
+  <!-- ===== PiP CHAT POPUP ===== -->
+  <div id="pip-chat" class="pip-chat hidden">
+    <div class="pip-header" id="pip-drag-handle">
+      <div class="pip-header-left">
+        <span class="pip-live-dot">&#9679;</span>
+        <span id="pip-room-name" class="pip-room-name"></span>
+      </div>
+      <button id="btn-pip-expand" class="pip-expand-btn" title="Back to Meet">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+      </button>
+    </div>
+    <div id="pip-messages" class="pip-messages"></div>
+    <div class="pip-input-bar">
+      <textarea id="pip-message-input" class="pip-textarea" placeholder="Message…" rows="1" maxlength="2000"></textarea>
+      <button id="btn-pip-send" class="pip-send-btn" title="Send">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script src="crypto.js"></script>
   <script src="emojis.js"></script>
