@@ -1,4 +1,4 @@
-const CACHE_NAME = 'livechat-v4';
+const CACHE_NAME = 'livechat-v5';
 const APP_SHELL = [
   '/',
   '/style.css',
@@ -6,6 +6,8 @@ const APP_SHELL = [
   '/crypto.js',
   '/emojis.js',
   '/stickers.js',
+  '/nacl-fast.min.js',
+  '/nacl-util.min.js',
   '/icon.svg',
   '/manifest.json'
 ];

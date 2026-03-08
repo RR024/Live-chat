@@ -1646,3 +1646,507 @@ textarea#message-input::placeholder { color: var(--text-muted); }
   .btn-meet { padding: 5px 10px; font-size: 12px; }
   .enc-badge { display: none; }
 }
+
+/* ==============================================
+   LIGHT THEME
+   ============================================= */
+[data-theme="light"] {
+  --bg-base:        #f0f2f5;
+  --bg-surface:     #ffffff;
+  --bg-elevated:    #e8ecf0;
+  --bg-hover:       #d8dde6;
+  --text-primary:   #1a1a2e;
+  --text-secondary: #4a4a65;
+  --text-muted:     #8888a0;
+  --border:         rgba(0,0,0,0.08);
+  --bubble-other:   #e8ecf0;
+  --glass-bg:       rgba(0,0,0,0.03);
+  --glass-border:   rgba(0,0,0,0.08);
+  --inset-hi:       inset 0 1px 0 rgba(255,255,255,0.8);
+  --shadow:         0 4px 20px rgba(0,0,0,0.12);
+  --shadow-3d:      0 12px 40px rgba(0,0,0,0.18), 0 4px 14px rgba(0,0,0,0.1);
+}
+[data-theme="light"] body { background: var(--bg-base); }
+[data-theme="light"] input[type="text"],
+[data-theme="light"] input[type="password"],
+[data-theme="light"] textarea {
+  background: #fff;
+  border-color: rgba(0,0,0,0.14);
+  color: var(--text-primary);
+}
+[data-theme="light"] input[type="text"]:focus,
+[data-theme="light"] input[type="password"]:focus,
+[data-theme="light"] textarea:focus {
+  border-color: var(--accent);
+}
+[data-theme="light"] .join-card,
+[data-theme="light"] .auth-card {
+  background: rgba(255,255,255,0.92);
+  border-color: rgba(0,0,0,0.1);
+}
+[data-theme="light"] .sidebar { background: var(--bg-surface); }
+[data-theme="light"] .msg-bubble { color: var(--text-primary); }
+[data-theme="light"] .msg-row.self .msg-bubble { color: #fff; }
+
+/* ==============================================
+   AUTH SCREEN
+   ============================================= */
+#auth-screen {
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(ellipse at 25% 20%, rgba(0,212,170,0.22) 0%, transparent 55%),
+    radial-gradient(ellipse at 80% 75%, rgba(82,130,255,0.14) 0%, transparent 50%),
+    var(--bg-base);
+  position: relative;
+  perspective: 1200px;
+}
+
+.auth-card {
+  background: linear-gradient(160deg, rgba(28,28,42,0.92) 0%, rgba(20,20,30,0.96) 100%);
+  border: 1px solid var(--glass-border);
+  border-radius: 24px;
+  padding: 40px 44px;
+  width: 100%;
+  max-width: 410px;
+  box-shadow: var(--shadow-3d);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  animation: cardEntry 0.5s cubic-bezier(0.34,1.56,0.64,1);
+}
+
+.auth-tabs {
+  display: flex;
+  gap: 4px;
+  background: rgba(255,255,255,0.04);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+}
+.auth-tab {
+  flex: 1;
+  padding: 8px;
+  border: none;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+.auth-tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.input-with-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.input-with-btn input { padding-right: 44px; }
+.input-with-btn .btn-show-pass {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px;
+  color: var(--text-muted);
+  transition: color var(--transition);
+}
+.input-with-btn .btn-show-pass:hover { color: var(--accent); }
+
+.auth-error {
+  font-size: 13px;
+  color: #ff6b6b;
+  min-height: 18px;
+  text-align: center;
+}
+
+.auth-guest-hint {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: inherit;
+  font-weight: 600;
+  padding: 0;
+  text-decoration: underline;
+  transition: color var(--transition);
+}
+.link-btn:hover { color: var(--accent-light); }
+
+/* password field on join screen */
+.join-pass-group { margin-top: -8px; }
+
+/* ==============================================
+   CHAT HEADER SEARCH BUTTON
+   ============================================= */
+.chat-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.btn-icon-sm {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 18px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color var(--transition), background var(--transition);
+  line-height: 1;
+}
+.btn-icon-sm:hover { color: var(--accent); background: var(--bg-hover); }
+
+/* ==============================================
+   SEARCH OVERLAY
+   ============================================= */
+.search-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(6,16,27,0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 16px;
+}
+.search-overlay.hidden { display: none; }
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 6px 12px;
+  margin-bottom: 12px;
+}
+.search-bar input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: 15px;
+}
+.search-bar input::placeholder { color: var(--text-muted); }
+.btn-search-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition);
+}
+.btn-search-close:hover { color: var(--accent); }
+
+.search-results {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.search-result-item {
+  padding: 10px 12px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition: background var(--transition);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-result-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+.search-result-item .sr-author { color: var(--accent); font-weight: 600; }
+.search-empty { text-align: center; color: var(--text-muted); padding: 24px 0; font-size: 14px; }
+
+/* Highlight flashes when scrolling to result */
+.highlight-msg { animation: highlightMsg 1.5s ease; }
+@keyframes highlightMsg {
+  0%,100% { background: transparent; }
+  20%,60% { background: rgba(0,212,170,0.12); border-radius: 8px; }
+}
+
+/* ==============================================
+   RECONNECTING OVERLAY
+   ============================================= */
+.reconnecting-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(6,16,27,0.82);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.reconnecting-overlay.hidden { display: none; }
+
+.reconnecting-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: 36px 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  box-shadow: var(--shadow-3d);
+  text-align: center;
+}
+.reconnecting-spinner {
+  width: 42px;
+  height: 42px;
+  border: 3px solid var(--bg-hover);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.reconnecting-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.reconnecting-msg {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* ==============================================
+   MESSAGE ACTIONS (delete / edit / react)
+   ============================================= */
+.msg-row { position: relative; }
+.msg-actions {
+  display: none;
+  position: absolute;
+  top: 0;
+  gap: 2px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  z-index: 10;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+}
+.msg-row.self .msg-actions { left: -4px; transform: translateX(-100%); }
+.msg-row.other .msg-actions { right: -4px; transform: translateX(100%); }
+.msg-row:hover .msg-actions { display: flex; }
+.msg-action-btn {
+  background: none;
+  border: none;
+  font-size: 15px;
+  padding: 4px 6px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background var(--transition);
+}
+.msg-action-btn:hover { background: var(--bg-hover); }
+
+.deleted-msg {
+  opacity: 0.5;
+  font-style: italic;
+  font-size: 13px;
+}
+.edited-badge {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+
+/* Inline react picker (emoji row on click) */
+.inline-react-picker {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 8px;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  box-shadow: var(--shadow);
+}
+.inline-react-picker button {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 2px 3px;
+  border-radius: 6px;
+  transition: transform 0.1s;
+}
+.inline-react-picker button:hover { transform: scale(1.3); }
+
+/* Reaction pills below message */
+.react-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.react-pill {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: background var(--transition);
+}
+.react-pill:hover { background: var(--bg-hover); }
+.react-count { font-size: 11px; color: var(--text-secondary); }
+
+/* Seen indicator */
+.seen-by {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  text-align: right;
+}
+.msg-row.other .seen-by { text-align: left; }
+
+/* ==============================================
+   FILE / IMAGE MESSAGES
+   ============================================= */
+.msg-bubble.file-bubble {
+  padding: 8px;
+  max-width: min(320px, 80vw);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.file-preview-img {
+  max-width: 100%;
+  max-height: 240px;
+  border-radius: var(--radius-sm);
+  object-fit: contain;
+  display: block;
+}
+.file-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.file-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+.file-size { font-size: 11px; color: var(--text-muted); }
+.file-dl-btn {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  padding: 4px 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  width: fit-content;
+  transition: background var(--transition), color var(--transition);
+}
+.file-dl-btn:hover { background: var(--accent); color: #fff; }
+
+/* File attach button in input bar */
+#btn-attach {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  padding: 0 6px;
+  cursor: pointer;
+  transition: color var(--transition);
+  line-height: 1;
+}
+#btn-attach:hover { color: var(--accent); }
+
+/* ==============================================
+   SIDEBAR FOOTER / THEME TOGGLE
+   ============================================= */
+.sidebar-footer-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+#btn-theme-toggle {
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 16px;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+#btn-theme-toggle:hover { background: var(--bg-elevated); color: var(--accent); }
+
+/* Invite link button */
+#btn-invite-link {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 15px;
+  padding: 4px 6px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition), background var(--transition);
+  line-height: 1;
+}
+#btn-invite-link:hover { color: var(--accent); background: var(--bg-hover); }
+
+/* ==============================================
+   ROOM PASSWORD FIELD (join screen)
+   ============================================= */
+input[type="password"] {
+  background: linear-gradient(145deg, rgba(28,28,40,0.92), rgba(22,22,32,0.96));
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 15px;
+  padding: 11px 14px;
+  outline: none;
+  box-shadow: inset 0 2px 8px rgba(0,0,0,0.25);
+  transition: border-color var(--transition), box-shadow var(--transition);
+  width: 100%;
+}
+input[type="password"]:focus {
+  border-color: rgba(0,212,170,0.7);
+  box-shadow: 0 0 0 3px var(--accent-glow), inset 0 2px 8px rgba(0,0,0,0.2);
+}
+input[type="password"]::placeholder { color: var(--text-muted); }
+
+@media (max-width: 640px) {
+  .auth-card { padding: 28px 20px; }
+  .inline-react-picker { left: 50%; transform: translateX(-50%); }
+}

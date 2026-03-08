@@ -15,9 +15,9 @@
   <link rel="apple-touch-icon" href="/icon.svg" />
 
   <link rel="stylesheet" href="style.css" />
-  <!-- TweetNaCl for E2E encryption -->
-  <script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl-fast.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/tweetnacl-util@0.15.1/nacl-util.min.js"></script>
+  <!-- TweetNaCl — bundled locally (no CDN dependency) -->
+  <script src="/nacl-fast.min.js"></script>
+  <script src="/nacl-util.min.js"></script>
 
   <!-- Service Worker registration -->
   <script>
@@ -30,8 +30,46 @@
 </head>
 <body>
 
+  <!-- ===== AUTH SCREEN ===== -->
+  <div id="auth-screen" class="screen active">
+    <div class="orb orb-1" aria-hidden="true"></div>
+    <div class="orb orb-2" aria-hidden="true"></div>
+    <div class="orb orb-3" aria-hidden="true"></div>
+    <div class="orb orb-4" aria-hidden="true"></div>
+    <div class="perspective-grid" aria-hidden="true"></div>
+    <div class="join-card" id="auth-card">
+      <div class="logo">
+        <span class="logo-icon">💬</span>
+        <span class="logo-text">LiveChat</span>
+        <span class="logo-badge">E2E</span>
+      </div>
+      <p class="tagline">End-to-end encrypted. No logs. No snooping.</p>
+
+      <!-- Tab toggle -->
+      <div class="auth-tabs">
+        <button id="btn-tab-login" class="auth-tab active">Login</button>
+        <button id="btn-tab-signup" class="auth-tab">Sign Up</button>
+      </div>
+
+      <div class="form-group">
+        <label>Username</label>
+        <input id="auth-username" type="text" placeholder="e.g. alex123" maxlength="20" autocomplete="username" />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <div class="room-row">
+          <input id="auth-password" type="password" placeholder="Min 6 characters" maxlength="100" autocomplete="current-password" />
+          <button id="btn-auth-show-pass" class="btn-secondary" title="Show/hide password">👁</button>
+        </div>
+      </div>
+      <button id="btn-auth-submit" class="btn-primary">Login</button>
+      <p id="auth-error" class="error-msg"></p>
+      <p class="auth-guest-hint">Or <button id="btn-guest" class="link-btn">continue as guest</button> (no account needed)</p>
+    </div>
+  </div>
+
   <!-- ===== JOIN SCREEN ===== -->
-  <div id="join-screen" class="screen active">
+  <div id="join-screen" class="screen">
     <!-- 3D Decorative Background -->
     <div class="orb orb-1" aria-hidden="true"></div>
     <div class="orb orb-2" aria-hidden="true"></div>
@@ -55,6 +93,10 @@
           <input id="input-room" type="text" placeholder="e.g. room-xyz" maxlength="30" autocomplete="off" />
           <button id="btn-gen-room" class="btn-secondary" title="Generate random room">⚡</button>
         </div>
+      </div>
+      <div class="form-group" id="join-pass-group">
+        <label>Room Password <span class="hint">(optional)</span></label>
+        <input id="input-room-password" type="password" placeholder="Leave blank if none" maxlength="50" autocomplete="off" />
       </div>
       <button id="btn-join" class="btn-primary">Join Room</button>
       <p id="join-error" class="error-msg"></p>
@@ -83,6 +125,9 @@
           <input id="input-new-room" type="text" placeholder="Room ID…" maxlength="30" autocomplete="off" />
           <button id="btn-join-new-room" class="btn-join-new">Join</button>
         </div>
+        <div class="add-room-row" style="margin-top:6px">
+          <input id="input-new-room-pass" type="password" placeholder="Password (if any)" maxlength="50" autocomplete="off" />
+        </div>
         <p id="add-room-error" class="add-room-error"></p>
       </div>
       <ul id="room-tabs" class="room-tabs"></ul>
@@ -92,12 +137,16 @@
         <div class="room-id-row">
           <span id="display-room-id" class="room-id-text"></span>
           <button id="btn-copy-room" title="Copy Room ID" class="icon-btn">📋</button>
+          <button id="btn-invite-link" title="Copy Invite Link" class="icon-btn">🔗</button>
         </div>
       </div>
       <div class="members-header">MEMBERS</div>
       <ul id="user-list" class="user-list"></ul>
       <div class="sidebar-footer">
-        <span id="self-indicator" class="self-name"></span>
+        <div class="sidebar-footer-top">
+          <span id="self-indicator" class="self-name"></span>
+          <button id="btn-theme-toggle" class="icon-btn" title="Toggle theme">🌙</button>
+        </div>
         <button id="btn-leave" class="btn-leave">Leave</button>
       </div>
     </aside>
@@ -118,6 +167,9 @@
             <span id="meet-count-badge" class="meet-count-badge"></span>
           </button>
         </div>
+        <div class="chat-header-right">
+          <button id="btn-search" class="icon-btn" title="Search messages">🔍</button>
+        </div>
         <div id="typing-indicator" class="typing-indicator"></div>
       </header>
 
@@ -137,12 +189,25 @@
         </div>
       </div>
 
+      <!-- Search overlay -->
+      <div id="search-overlay" class="search-overlay hidden">
+        <div class="search-bar">
+          <input id="search-input" type="text" placeholder="Search messages…" maxlength="100" autocomplete="off" />
+          <button id="btn-search-close" class="icon-btn">✕</button>
+        </div>
+        <div id="search-results" class="search-results"></div>
+      </div>
+
       <div id="emoji-picker" class="emoji-picker hidden"></div>
       <div id="sticker-picker" class="sticker-picker hidden"></div>
+
+      <!-- Hidden file input -->
+      <input id="file-input" type="file" accept="image/*,video/*,audio/*,.pdf,.txt,.zip" style="display:none" />
 
       <footer class="chat-input-bar">
         <button id="btn-emoji" class="toolbar-btn" title="Emojis">😊</button>
         <button id="btn-sticker" class="toolbar-btn" title="Stickers">🎨</button>
+        <button id="btn-attach" class="toolbar-btn" title="Attach file">📎</button>
         <div class="input-wrapper">
           <textarea id="message-input" placeholder="Type a message…" rows="1" maxlength="2000"></textarea>
         </div>
@@ -216,6 +281,15 @@
 
   <!-- Toast notifications -->
   <div id="toast-container" class="toast-container"></div>
+
+  <!-- Reconnecting overlay -->
+  <div id="reconnecting-overlay" class="reconnecting-overlay hidden">
+    <div class="reconnecting-card">
+      <div class="reconnecting-spinner"></div>
+      <div class="reconnecting-title">Reconnecting…</div>
+      <div id="reconnecting-msg" class="reconnecting-msg">Connection lost. Trying to reconnect.</div>
+    </div>
+  </div>
 
   <!-- ===== PiP VIDEO POPUP ===== -->
   <div id="pip-chat" class="pip-chat hidden">
