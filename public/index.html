@@ -112,6 +112,11 @@
           </button>
           <span id="chat-room-title" class="chat-room-title"></span>
           <span class="enc-badge">🔒 End-to-End Encrypted</span>
+          <button id="btn-meet" class="btn-meet" title="Join Voice / Video Meet">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+            Meet
+            <span id="meet-count-badge" class="meet-count-badge"></span>
+          </button>
         </div>
         <div id="typing-indicator" class="typing-indicator"></div>
       </header>
@@ -153,6 +158,31 @@
   </div>
 
   <div id="sidebar-overlay" class="sidebar-overlay"></div>
+
+  <!-- ===== MEET OVERLAY ===== -->
+  <div id="meet-overlay" class="meet-overlay hidden">
+    <div class="meet-bar">
+      <div class="meet-bar-left">
+        <span class="meet-bar-icon">📹</span>
+        <span id="meet-room-label" class="meet-bar-room"></span>
+        <span class="meet-live">&#9679; LIVE</span>
+      </div>
+      <div class="meet-bar-controls">
+        <button id="btn-meet-mic" class="meet-ctrl-btn" title="Toggle Microphone"></button>
+        <button id="btn-meet-cam" class="meet-ctrl-btn" title="Toggle Camera"></button>
+        <button id="btn-meet-screen" class="meet-ctrl-btn" title="Share Screen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="2" y="3" width="20" height="14" rx="2"/><polyline points="8 21 12 17 16 21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        </button>
+        <button id="btn-meet-minimize" class="meet-ctrl-btn" title="Back to Chat">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <button id="btn-meet-leave" class="meet-ctrl-btn meet-leave-btn" title="Leave Call">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07C9.44 17.29 7.76 15.06"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="meet-tiles" class="meet-tiles"></div>
+  </div>
 
   <!-- Toast notifications -->
   <div id="toast-container" class="toast-container"></div>

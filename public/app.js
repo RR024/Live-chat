@@ -346,6 +346,8 @@
     socket.on('disconnect', () => {
       appendSystemMessage(activeRoomId, 'Disconnected from server.');
     });
+
+    setupMeetSocketEvents();
   }
 
   // ── Sending messages ────────────────────────────────────────────────────
@@ -606,6 +608,7 @@
 
   function leaveRoom(roomId) {
     if (!roomStates[roomId]) return;
+    if (meetActive && meetRoomId === roomId) leaveMeet();
     if (socket) socket.emit('leave-room', { roomId });
     E2E.destroyRoom(roomId);
     delete roomStates[roomId];
@@ -822,6 +825,269 @@
   }
 
   initChatCanvas();
+
+  // ── Meet (Voice / Video Call) ────────────────────────────────────────────
+  const meetOverlay   = document.getElementById('meet-overlay');
+  const meetTilesEl   = document.getElementById('meet-tiles');
+  const btnMeetJoin   = document.getElementById('btn-meet');
+  const btnMeetMic    = document.getElementById('btn-meet-mic');
+  const btnMeetCam    = document.getElementById('btn-meet-cam');
+  const btnMeetScreen = document.getElementById('btn-meet-screen');
+  const btnMeetLeave  = document.getElementById('btn-meet-leave');
+  const btnMeetMin    = document.getElementById('btn-meet-minimize');
+  const meetRoomLabel = document.getElementById('meet-room-label');
+  const meetCountEl   = document.getElementById('meet-count-badge');
+
+  const MIC_ON  = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`;
+  const MIC_OFF = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`;
+  const CAM_ON  = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>`;
+  const CAM_OFF = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3.5-3H21a2 2 0 0 1 2 2v9.5"/><polyline points="16 9 23 7 23 17"/></svg>`;
+
+  let meetActive  = false;
+  let meetRoomId  = null;
+  let localStream = null;
+  let micEnabled  = true;
+  let camEnabled  = true;
+  const meetPeers = new Map(); // socketId -> RTCPeerConnection
+  const meetNames = new Map(); // socketId -> username
+
+  const ICE_CFG = { iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' }
+  ]};
+
+  async function joinMeet() {
+    if (meetActive) { meetOverlay.classList.remove('hidden'); return; }
+    const roomId = activeRoomId;
+    if (!roomId || !socket) { showToast('Join a room first.'); return; }
+
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      camEnabled = true;
+    } catch {
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+        camEnabled = false;
+      } catch {
+        showToast('Microphone / camera access denied.');
+        return;
+      }
+    }
+
+    meetActive = true;
+    meetRoomId = roomId;
+    micEnabled = true;
+    meetRoomLabel.textContent = roomId;
+    meetTilesEl.innerHTML = '';
+    _addMeetTile('local', myUsername + ' (you)', localStream, true);
+    _syncMeetCtrl();
+    meetOverlay.classList.remove('hidden');
+    btnMeetJoin.classList.add('in-call');
+    socket.emit('meet-join', { roomId });
+  }
+
+  function leaveMeet() {
+    if (!meetActive) return;
+    if (socket && meetRoomId) socket.emit('meet-leave', { roomId: meetRoomId });
+    meetPeers.forEach(pc => pc.close());
+    meetPeers.clear();
+    meetNames.clear();
+    if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+    meetActive = false;
+    meetRoomId = null;
+    meetTilesEl.innerHTML = '';
+    meetOverlay.classList.add('hidden');
+    btnMeetJoin.classList.remove('in-call');
+    if (meetCountEl) meetCountEl.textContent = '';
+  }
+
+  function _addMeetTile(id, username, stream, isLocal) {
+    const tileId = `mti-${id}`;
+    const existing = document.getElementById(tileId);
+    if (existing) {
+      const v = existing.querySelector('video');
+      if (v && stream) v.srcObject = stream;
+      return;
+    }
+    const tile = document.createElement('div');
+    tile.className = 'meet-tile';
+    tile.id = tileId;
+
+    const video = document.createElement('video');
+    video.autoplay = true; video.playsInline = true; video.muted = isLocal;
+    if (stream) video.srcObject = stream;
+
+    const av = document.createElement('div');
+    av.className = 'meet-tile-av';
+    av.textContent = (username || '?').charAt(0).toUpperCase();
+    av.style.background = avatarColor(username);
+    const hasVid = stream && stream.getVideoTracks().length > 0;
+    const showAv = !hasVid || (isLocal && !camEnabled);
+    av.style.display    = showAv ? 'flex'  : 'none';
+    video.style.display = showAv ? 'none'  : 'block';
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'meet-tile-name';
+    nameEl.textContent = sanitize(username);
+
+    tile.appendChild(video);
+    tile.appendChild(av);
+    tile.appendChild(nameEl);
+    meetTilesEl.appendChild(tile);
+    _updateMeetCount();
+  }
+
+  function _removeMeetTile(socketId) {
+    const tile = document.getElementById(`mti-${socketId}`);
+    if (tile) tile.remove();
+    _updateMeetCount();
+  }
+
+  function _updateMeetCount() {
+    const n = meetTilesEl.querySelectorAll('.meet-tile').length;
+    if (meetCountEl) meetCountEl.textContent = meetActive && n > 0 ? String(n) : '';
+  }
+
+  function _syncMeetCtrl() {
+    btnMeetMic.innerHTML = micEnabled ? MIC_ON  : MIC_OFF;
+    btnMeetCam.innerHTML = camEnabled ? CAM_ON  : CAM_OFF;
+    btnMeetMic.classList.toggle('muted', !micEnabled);
+    btnMeetCam.classList.toggle('muted', !camEnabled);
+  }
+
+  function toggleMeetMic() {
+    if (!meetActive) return;
+    micEnabled = !micEnabled;
+    localStream?.getAudioTracks().forEach(t => t.enabled = micEnabled);
+    _syncMeetCtrl();
+  }
+
+  function toggleMeetCam() {
+    if (!meetActive) return;
+    camEnabled = !camEnabled;
+    localStream?.getVideoTracks().forEach(t => t.enabled = camEnabled);
+    const tile = document.getElementById('mti-local');
+    if (tile) {
+      const v  = tile.querySelector('video');
+      const av = tile.querySelector('.meet-tile-av');
+      if (v)  v.style.display  = camEnabled ? 'block' : 'none';
+      if (av) av.style.display = camEnabled ? 'none'  : 'flex';
+    }
+    _syncMeetCtrl();
+  }
+
+  async function toggleMeetScreen() {
+    if (!meetActive) return;
+    try {
+      const ss    = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      const track = ss.getVideoTracks()[0];
+      meetPeers.forEach(pc => {
+        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+        if (sender) sender.replaceTrack(track);
+      });
+      const tile = document.getElementById('mti-local');
+      if (tile) {
+        const v = tile.querySelector('video');
+        if (v) v.srcObject = new MediaStream([track, ...(localStream?.getAudioTracks() || [])]);
+      }
+      btnMeetScreen.classList.add('active');
+      track.onended = () => {
+        const camTrack = localStream?.getVideoTracks()[0];
+        if (camTrack) {
+          meetPeers.forEach(pc => {
+            const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+            if (sender) sender.replaceTrack(camTrack);
+          });
+          const t = document.getElementById('mti-local');
+          if (t) { const v = t.querySelector('video'); if (v) v.srcObject = localStream; }
+        }
+        btnMeetScreen.classList.remove('active');
+      };
+    } catch { /* user cancelled or not supported */ }
+  }
+
+  async function _createMeetPC(remoteId, initiator) {
+    const pc = new RTCPeerConnection(ICE_CFG);
+    meetPeers.set(remoteId, pc);
+    localStream?.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+    pc.ontrack = ({ streams: [stream] }) => {
+      const uname = meetNames.get(remoteId) || 'Unknown';
+      _addMeetTile(remoteId, uname, stream, false);
+    };
+
+    pc.onicecandidate = ({ candidate }) => {
+      if (candidate && socket) {
+        socket.emit('webrtc-ice', { to: remoteId, candidate, roomId: meetRoomId });
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+        _removeMeetTile(remoteId);
+        pc.close();
+        meetPeers.delete(remoteId);
+      }
+    };
+
+    if (initiator) {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit('webrtc-offer', { to: remoteId, offer, roomId: meetRoomId });
+    }
+    return pc;
+  }
+
+  function setupMeetSocketEvents() {
+    socket.on('meet-peers', async ({ roomId, peers }) => {
+      if (roomId !== meetRoomId) return;
+      for (const { socketId, username } of peers) {
+        meetNames.set(socketId, username);
+        await _createMeetPC(socketId, true);
+      }
+    });
+
+    socket.on('meet-peer-joined', ({ socketId, username, roomId }) => {
+      meetNames.set(socketId, username);
+      if (roomId === activeRoomId) showToast(`${sanitize(username)} joined the Meet 📹`);
+    });
+
+    socket.on('meet-peer-left', ({ socketId }) => {
+      const pc = meetPeers.get(socketId);
+      if (pc) { pc.close(); meetPeers.delete(socketId); }
+      _removeMeetTile(socketId);
+      meetNames.delete(socketId);
+    });
+
+    socket.on('webrtc-offer', async ({ from, offer, roomId }) => {
+      if (!meetActive || roomId !== meetRoomId) return;
+      let pc = meetPeers.get(from);
+      if (!pc) pc = await _createMeetPC(from, false);
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit('webrtc-answer', { to: from, answer, roomId: meetRoomId });
+    });
+
+    socket.on('webrtc-answer', async ({ from, answer }) => {
+      const pc = meetPeers.get(from);
+      if (!pc) return;
+      try { await pc.setRemoteDescription(new RTCSessionDescription(answer)); } catch {}
+    });
+
+    socket.on('webrtc-ice', async ({ from, candidate }) => {
+      const pc = meetPeers.get(from);
+      if (!pc) return;
+      try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
+    });
+  }
+
+  btnMeetJoin.addEventListener('click', joinMeet);
+  btnMeetMic.addEventListener('click', toggleMeetMic);
+  btnMeetCam.addEventListener('click', toggleMeetCam);
+  btnMeetScreen.addEventListener('click', toggleMeetScreen);
+  btnMeetLeave.addEventListener('click', leaveMeet);
+  btnMeetMin.addEventListener('click', () => meetOverlay.classList.add('hidden'));
 
   // ── Auto-rejoin on refresh ─────────────────────────────────────────────
   (function autoRejoin() {

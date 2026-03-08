@@ -50,7 +50,7 @@ io.on('connection', (socket) => {
     if (typeof publicKey !== 'string' || publicKey.length > 64) return;
     if (socket.roomIds.has(roomId)) return; // already in this room
 
-    if (!rooms[roomId]) rooms[roomId] = { users: {} };
+    if (!rooms[roomId]) rooms[roomId] = { users: {}, meet: { users: {} } };
 
     rooms[roomId].users[socket.id] = { username, publicKey };
     socket.join(roomId);
@@ -113,6 +113,45 @@ io.on('connection', (socket) => {
     });
   });
 
+  // ── Meet / WebRTC signaling ─────────────────────────────────────────────
+  socket.on('meet-join', ({ roomId }) => {
+    if (!roomId || !socket.roomIds.has(roomId)) return;
+    if (!rooms[roomId]) return;
+    if (!rooms[roomId].meet) rooms[roomId].meet = { users: {} };
+    if (rooms[roomId].meet.users[socket.id]) return;
+
+    const existingPeers = Object.keys(rooms[roomId].meet.users)
+      .map(id => ({ socketId: id, username: rooms[roomId].users[id]?.username || 'Unknown' }));
+
+    rooms[roomId].meet.users[socket.id] = true;
+    socket.emit('meet-peers', { roomId, peers: existingPeers });
+    socket.to(roomId).emit('meet-peer-joined', { socketId: socket.id, username: socket.username, roomId });
+  });
+
+  socket.on('meet-leave', ({ roomId }) => {
+    if (!roomId || !rooms[roomId]?.meet?.users[socket.id]) return;
+    delete rooms[roomId].meet.users[socket.id];
+    io.to(roomId).emit('meet-peer-left', { socketId: socket.id, roomId });
+  });
+
+  socket.on('webrtc-offer', ({ to, offer, roomId }) => {
+    if (!to || !offer || !roomId || typeof offer !== 'object') return;
+    if (!rooms[roomId]?.users[to]) return;
+    io.to(to).emit('webrtc-offer', { from: socket.id, offer, roomId });
+  });
+
+  socket.on('webrtc-answer', ({ to, answer, roomId }) => {
+    if (!to || !answer || !roomId || typeof answer !== 'object') return;
+    if (!rooms[roomId]?.users[to]) return;
+    io.to(to).emit('webrtc-answer', { from: socket.id, answer, roomId });
+  });
+
+  socket.on('webrtc-ice', ({ to, candidate, roomId }) => {
+    if (!to || !candidate || !roomId || typeof candidate !== 'object') return;
+    if (!rooms[roomId]?.users[to]) return;
+    io.to(to).emit('webrtc-ice', { from: socket.id, candidate, roomId });
+  });
+
   socket.on('disconnect', () => {
     socket.roomIds.forEach(roomId => _leaveRoom(socket, roomId));
   });
@@ -120,6 +159,10 @@ io.on('connection', (socket) => {
 
 function _leaveRoom(socket, roomId) {
   if (!rooms[roomId]) return;
+  if (rooms[roomId].meet?.users[socket.id]) {
+    delete rooms[roomId].meet.users[socket.id];
+    io.to(roomId).emit('meet-peer-left', { socketId: socket.id, roomId });
+  }
   delete rooms[roomId].users[socket.id];
   socket.leave(roomId);
   socket.roomIds.delete(roomId);
