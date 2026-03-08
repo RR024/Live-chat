@@ -161,27 +161,39 @@
 
   <!-- ===== MEET OVERLAY ===== -->
   <div id="meet-overlay" class="meet-overlay hidden">
+    <!-- Top bar: room info + minimize only -->
     <div class="meet-bar">
       <div class="meet-bar-left">
         <span class="meet-bar-icon">📹</span>
         <span id="meet-room-label" class="meet-bar-room"></span>
         <span class="meet-live">&#9679; LIVE</span>
       </div>
-      <div class="meet-bar-controls">
-        <button id="btn-meet-mic" class="meet-ctrl-btn" title="Toggle Microphone"></button>
-        <button id="btn-meet-cam" class="meet-ctrl-btn" title="Toggle Camera"></button>
-        <button id="btn-meet-screen" class="meet-ctrl-btn" title="Share Screen">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="2" y="3" width="20" height="14" rx="2"/><polyline points="8 21 12 17 16 21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-        </button>
-        <button id="btn-meet-minimize" class="meet-ctrl-btn" title="Back to Chat">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><polyline points="15 18 9 12 15 6"/></svg>
-        </button>
-        <button id="btn-meet-leave" class="meet-ctrl-btn meet-leave-btn" title="Leave Call">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07C9.44 17.29 7.76 15.06"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+      <div class="meet-bar-right">
+        <button id="btn-meet-minimize" class="meet-ctrl-btn meet-ctrl-sm" title="Back to Chat">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><polyline points="15 18 9 12 15 6"/></svg>
+          <span>Back to Chat</span>
         </button>
       </div>
     </div>
+
+    <!-- Video tiles -->
     <div id="meet-tiles" class="meet-tiles"></div>
+
+    <!-- Floating bottom controls -->
+    <div class="meet-bottom-controls">
+      <button id="btn-meet-mic" class="meet-ctrl-btn" title="Microphone"></button>
+      <button id="btn-meet-cam" class="meet-ctrl-btn" title="Camera"></button>
+      <button id="btn-meet-screen" class="meet-ctrl-btn" title="Share Screen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><rect x="2" y="3" width="20" height="14" rx="2"/><polyline points="8 21 12 17 16 21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      </button>
+      <button id="btn-meet-pip" class="meet-ctrl-btn" title="Picture in Picture">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><rect x="12" y="11" width="8" height="5" rx="1" ry="1" fill="currentColor" stroke="none"/></svg>
+      </button>
+      <div class="meet-ctrl-divider"></div>
+      <button id="btn-meet-leave" class="meet-ctrl-btn meet-leave-btn" title="Leave Call">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="22" height="22"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07C9.44 17.29 7.76 15.06"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+      </button>
+    </div>
   </div>
 
   <!-- Toast notifications -->

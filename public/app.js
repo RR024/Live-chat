@@ -833,6 +833,7 @@
   const btnMeetMic    = document.getElementById('btn-meet-mic');
   const btnMeetCam    = document.getElementById('btn-meet-cam');
   const btnMeetScreen = document.getElementById('btn-meet-screen');
+  const btnMeetPip    = document.getElementById('btn-meet-pip');
   const btnMeetLeave  = document.getElementById('btn-meet-leave');
   const btnMeetMin    = document.getElementById('btn-meet-minimize');
   const meetRoomLabel = document.getElementById('meet-room-label');
@@ -1082,10 +1083,31 @@
     });
   }
 
+  async function togglePiP() {
+    if (!meetActive) return;
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+        btnMeetPip.classList.remove('active');
+      } else {
+        const vid = document.querySelector('#mti-local video');
+        if (!vid) { showToast('No video available for PiP.'); return; }
+        await vid.requestPictureInPicture();
+        btnMeetPip.classList.add('active');
+        vid.addEventListener('leavepictureinpicture', () => {
+          btnMeetPip.classList.remove('active');
+        }, { once: true });
+      }
+    } catch {
+      showToast('Picture-in-Picture is not supported in this browser.');
+    }
+  }
+
   btnMeetJoin.addEventListener('click', joinMeet);
   btnMeetMic.addEventListener('click', toggleMeetMic);
   btnMeetCam.addEventListener('click', toggleMeetCam);
   btnMeetScreen.addEventListener('click', toggleMeetScreen);
+  btnMeetPip.addEventListener('click', togglePiP);
   btnMeetLeave.addEventListener('click', leaveMeet);
   btnMeetMin.addEventListener('click', () => meetOverlay.classList.add('hidden'));
 

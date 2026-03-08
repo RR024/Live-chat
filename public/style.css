@@ -1204,6 +1204,7 @@ textarea#message-input::placeholder { color: var(--text-muted); }
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   animation: meetIn 0.22s ease;
+  overflow: hidden;
 }
 .meet-overlay.hidden { display: none !important; }
 @keyframes meetIn {
@@ -1249,15 +1250,53 @@ textarea#message-input::placeholder { color: var(--text-muted); }
   50%     { opacity: 0.45; }
 }
 
-/* ── Meet control buttons ───────────────────── */
-.meet-bar-controls {
+/* ── Meet top-bar right ─────────────────────── */
+.meet-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.meet-ctrl-sm {
+  border-radius: 20px !important;
+  width: auto !important;
+  padding: 0 14px !important;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary) !important;
+}
+.meet-ctrl-sm span { line-height: 1; }
+
+/* ── Floating bottom controls ───────────────── */
+.meet-bottom-controls {
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 10px;
+  background: linear-gradient(145deg, rgba(12,20,34,0.88), rgba(8,14,24,0.92));
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 50px;
+  padding: 10px 18px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06);
+  z-index: 5;
 }
+.meet-ctrl-divider {
+  width: 1px;
+  height: 32px;
+  background: rgba(255,255,255,0.1);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* ── Meet control buttons ───────────────────── */
 .meet-ctrl-btn {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(255,255,255,0.07);
@@ -1272,6 +1311,7 @@ textarea#message-input::placeholder { color: var(--text-muted); }
 .meet-ctrl-btn:hover {
   background: rgba(255,255,255,0.14);
   transform: scale(1.08);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.3);
 }
 .meet-ctrl-btn:active { transform: scale(0.94); }
 .meet-ctrl-btn.muted {
@@ -1303,7 +1343,7 @@ textarea#message-input::placeholder { color: var(--text-muted); }
   align-content: center;
   justify-content: center;
   gap: 16px;
-  padding: 28px 24px;
+  padding: 24px 24px 110px;
   overflow-y: auto;
 }
 
@@ -1359,13 +1399,19 @@ textarea#message-input::placeholder { color: var(--text-muted); }
   white-space: nowrap;
 }
 
+/* ── Tiles make room for bottom controls ───── */
+/* padding-bottom already set in .meet-tiles above */
+
 /* ── Responsive meet ────────────────────────── */
 @media (max-width: 640px) {
   .meet-bar { padding: 12px 14px; gap: 10px; }
-  .meet-ctrl-btn { width: 38px; height: 38px; }
-  .meet-tiles { padding: 16px 12px; gap: 10px; }
-  .meet-tile { width: calc(50% - 5px) !important; height: 160px !important; }
-  .meet-tiles:has(.meet-tile:only-child) .meet-tile { width: 100% !important; height: 260px !important; }
+  .meet-ctrl-btn { width: 42px; height: 42px; }
+  .meet-ctrl-sm { padding: 0 10px !important; font-size: 12px; }
+  .meet-ctrl-sm span { display: none; }
+  .meet-bottom-controls { gap: 6px; padding: 8px 12px; bottom: 18px; }
+  .meet-tiles { padding: 12px 10px 88px; gap: 8px; }
+  .meet-tile { width: calc(50% - 4px) !important; height: 150px !important; }
+  .meet-tiles:has(.meet-tile:only-child) .meet-tile { width: 100% !important; height: 240px !important; }
   .btn-meet { padding: 5px 10px; font-size: 12px; }
   .enc-badge { display: none; }
 }
