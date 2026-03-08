@@ -430,13 +430,6 @@
       if (!isSelf) { state.unread++; renderRoomTabs(); }
     }
 
-    // Mirror into pip chat if open
-    if (typeof pipOpen !== 'undefined' && pipOpen && roomId === activeRoomId) {
-      const welcome = pipMessages.querySelector('.welcome-msg');
-      if (welcome) welcome.remove();
-      pipMessages.appendChild(row.cloneNode(true));
-      pipMessages.scrollTop = pipMessages.scrollHeight;
-    }
   }
 
   function appendSystemMessage(roomId, html) {
@@ -944,12 +937,14 @@
     tile.appendChild(nameEl);
     meetTilesEl.appendChild(tile);
     _updateMeetCount();
+    if (typeof _pipSync === 'function') _pipSync();
   }
 
   function _removeMeetTile(socketId) {
     const tile = document.getElementById(`mti-${socketId}`);
     if (tile) tile.remove();
     _updateMeetCount();
+    if (typeof _pipSync === 'function') _pipSync();
   }
 
   function _updateMeetCount() {
@@ -1091,42 +1086,64 @@
     });
   }
 
-  // ── PiP Chat Popup ────────────────────────────────────────────────
-  const pipChat        = document.getElementById('pip-chat');
-  const pipMessages    = document.getElementById('pip-messages');
-  const pipRoomName    = document.getElementById('pip-room-name');
-  const pipInput       = document.getElementById('pip-message-input');
-  const btnPipSend     = document.getElementById('btn-pip-send');
-  const btnPipExpand   = document.getElementById('btn-pip-expand');
-  let   pipOpen        = false;
+  // ── PiP Video Popup ──────────────────────────────────────────────
+  const pipChat      = document.getElementById('pip-chat');
+  const pipTilesEl   = document.getElementById('pip-tiles');
+  const pipRoomName  = document.getElementById('pip-room-name');
+  const btnPipExpand = document.getElementById('btn-pip-expand');
+  let   pipOpen      = false;
 
-  // Sync a clone of a message node into pip messages
-  function _pipAppend(node) {
-    if (!pipOpen) return;
-    const clone = node.cloneNode(true);
-    pipMessages.appendChild(clone);
-    pipMessages.scrollTop = pipMessages.scrollHeight;
+  // Build mini video tiles in pip from existing meet tile streams
+  function _pipBuildTiles() {
+    pipTilesEl.innerHTML = '';
+    const meetTileNodes = meetTilesEl.querySelectorAll('.meet-tile');
+    meetTileNodes.forEach(t => {
+      const id    = t.id.replace('mti-', '');
+      const srcV  = t.querySelector('video');
+      const srcAv = t.querySelector('.meet-tile-av');
+      const srcNm = t.querySelector('.meet-tile-name');
+
+      const tile = document.createElement('div');
+      tile.className = 'pip-tile';
+      tile.id = 'piptile-' + id;
+
+      const video = document.createElement('video');
+      video.autoplay = true; video.playsInline = true;
+      video.muted = (id === 'local');
+      if (srcV && srcV.srcObject) video.srcObject = srcV.srcObject;
+
+      const av = document.createElement('div');
+      av.className = 'pip-tile-av';
+      av.textContent = srcAv ? srcAv.textContent : '?';
+      av.style.background = srcAv ? srcAv.style.background : '#444';
+
+      const showAv = !srcV || srcV.style.display === 'none';
+      video.style.display = showAv ? 'none' : 'block';
+      av.style.display    = showAv ? 'flex'  : 'none';
+
+      const name = document.createElement('div');
+      name.className = 'pip-tile-name';
+      name.textContent = srcNm ? srcNm.textContent : '';
+
+      tile.appendChild(video);
+      tile.appendChild(av);
+      tile.appendChild(name);
+      pipTilesEl.appendChild(tile);
+    });
   }
 
-  // Load existing messages into pip
-  function _pipLoadMessages() {
-    pipMessages.innerHTML = '';
-    const state = roomStates[activeRoomId];
-    if (!state) return;
-    state.nodes.forEach(n => {
-      const clone = n.cloneNode(true);
-      pipMessages.appendChild(clone);
-    });
-    pipMessages.scrollTop = pipMessages.scrollHeight;
+  // Keep pip tiles in sync when meet tiles change (peer joins/leaves)
+  function _pipSync() {
+    if (!pipOpen) return;
+    _pipBuildTiles();
   }
 
   function openPip() {
     pipOpen = true;
     pipRoomName.textContent = activeRoomId;
-    _pipLoadMessages();
+    _pipBuildTiles();
     meetOverlay.classList.add('hidden');
     pipChat.classList.remove('hidden');
-    pipInput.focus();
     btnMeetPip.classList.add('active');
   }
 
@@ -1141,27 +1158,6 @@
     if (!meetActive) return;
     if (pipOpen) closePip(); else openPip();
   }
-
-  // Send from pip input
-  function _pipSend() {
-    const text = pipInput.value.trim();
-    if (!text) return;
-    sendMessage(text, 'text');
-    pipInput.value = '';
-    pipInput.style.height = 'auto';
-  }
-
-  btnPipSend.addEventListener('click', _pipSend);
-  pipInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      _pipSend();
-    }
-  });
-  pipInput.addEventListener('input', () => {
-    pipInput.style.height = 'auto';
-    pipInput.style.height = Math.min(pipInput.scrollHeight, 80) + 'px';
-  });
 
   btnPipExpand.addEventListener('click', closePip);
 
@@ -1188,7 +1184,6 @@
       dragging = false;
       pipChat.style.transition = '';
     });
-    // Touch drag
     handle.addEventListener('touchstart', (e) => {
       if (e.target.closest('button')) return;
       const t = e.touches[0];

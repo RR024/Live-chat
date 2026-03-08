@@ -1,4 +1,4 @@
-const CACHE_NAME = 'livechat-v2';
+const CACHE_NAME = 'livechat-v3';
 const APP_SHELL = [
   '/',
   '/style.css',
