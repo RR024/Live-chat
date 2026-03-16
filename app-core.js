@@ -13,36 +13,109 @@ const rateLimit  = require('express-rate-limit');
 const bcrypt     = require('bcryptjs');
 const jwt        = require('jsonwebtoken');
 const webpush    = require('web-push');
+const Database   = require('better-sqlite3');
+
+// ── Logger ─────────────────────────────────────────────────────────────────
+const pinoOpts = { level: process.env.LOG_LEVEL || 'info' };
+if (process.env.NODE_ENV !== 'production') {
+  try {
+    require.resolve('pino-pretty');
+    pinoOpts.transport = { target: 'pino-pretty', options: { colorize: true } };
+  } catch { /* pino-pretty not installed */ }
+}
+const pino   = require('pino');
+const logger = pino(pinoOpts);
 
 const app    = express();
 const server = http.createServer(app);
 const io     = new Server(server, {
-  cors: { origin: process.env.ALLOWED_ORIGIN || '*' }
+  cors: process.env.ALLOWED_ORIGIN ? { origin: process.env.ALLOWED_ORIGIN } : false
 });
 
 // ── Config ─────────────────────────────────────────────────────────────────
-const JWT_SECRET = process.env.JWT_SECRET || 'livechat-jwt-dev-secret-change-in-prod';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  logger.fatal(
+    'JWT_SECRET environment variable is required. ' +
+    'Set it in your .env file or deployment config. Refusing to start. ' +
+    'See .env.example for guidance.'
+  );
+  process.exit(1);
+}
+
 const DATA_DIR   = path.join(__dirname, 'data');
-const USERS_FILE = path.join(DATA_DIR, 'users.json');
 
 // VAPID keys for web push
-const VAPID_PUBLIC  = process.env.VAPID_PUBLIC  || 'BG5muKyULiwDyV8-VL6xX_d1vme3aq3v-GMLV1B87GDo53AjZ6wymN1zo8f6Pnl9mWrDLWaby_Qw9NGjtv3w1zg';
-const VAPID_PRIVATE = process.env.VAPID_PRIVATE || 'bQhEf6D7UXxvU6UGkHLF4RLPhYqV8lmwRaWXwHP4BvA';
-webpush.setVapidDetails('mailto:admin@livechat.app', VAPID_PUBLIC, VAPID_PRIVATE);
+const VAPID_PUBLIC  = process.env.VAPID_PUBLIC;
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE;
+let pushEnabled = false;
+if (VAPID_PUBLIC && VAPID_PRIVATE) {
+  try {
+    webpush.setVapidDetails('mailto:admin@livechat.app', VAPID_PUBLIC, VAPID_PRIVATE);
+    pushEnabled = true;
+    logger.info('Push notifications enabled.');
+  } catch (e) {
+    logger.warn({ err: e }, 'Invalid VAPID keys — push notifications disabled.');
+  }
+} else {
+  logger.warn('VAPID_PUBLIC / VAPID_PRIVATE not set — push notifications disabled.');
+}
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// ── SQLite Database ─────────────────────────────────────────────────────────
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-function loadUsers() {
-  try { return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')); } catch { return {}; }
-}
-function saveUsers(users) {
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-}
+const db = new Database(path.join(DATA_DIR, 'livechat.db'));
+db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    username_lower TEXT    PRIMARY KEY,
+    username       TEXT    NOT NULL,
+    password_hash  TEXT    NOT NULL,
+    created_at     INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    username_lower TEXT    NOT NULL REFERENCES users(username_lower) ON DELETE CASCADE,
+    endpoint       TEXT    NOT NULL UNIQUE,
+    subscription   TEXT    NOT NULL
+  );
+`);
+
+const stmts = {
+  findUser:      db.prepare('SELECT * FROM users WHERE username_lower = ?'),
+  insertUser:    db.prepare('INSERT INTO users (username_lower, username, password_hash, created_at) VALUES (?, ?, ?, ?)'),
+  deleteUser:    db.prepare('DELETE FROM users WHERE username_lower = ?'),
+  findSubs:      db.prepare('SELECT subscription FROM push_subscriptions WHERE username_lower = ?'),
+  insertSub:     db.prepare('INSERT OR IGNORE INTO push_subscriptions (username_lower, endpoint, subscription) VALUES (?, ?, ?)'),
+  deleteOldSubs: db.prepare(`
+    DELETE FROM push_subscriptions
+    WHERE username_lower = ? AND id NOT IN (
+      SELECT id FROM push_subscriptions WHERE username_lower = ? ORDER BY id DESC LIMIT 5
+    )
+  `)
+};
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+// (users.json removed — now using SQLite via stmts above)
 
 // ── Express setup ──────────────────────────────────────────────────────────
 app.set('trust proxy', 1);
-app.use(helmet({ contentSecurityPolicy: false }));
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc:  ["'self'"],
+      styleSrc:   ["'self'", "'unsafe-inline'"],
+      connectSrc: ["'self'", 'wss:', 'ws:'],
+      mediaSrc:   ["'self'", 'blob:'],
+      imgSrc:     ["'self'", 'data:', 'blob:'],
+      workerSrc:  ["'self'"],
+      manifestSrc:["'self'"],
+    }
+  }
+}));
 app.use(express.json({ limit: '5mb' }));
 
 // HTTP rate limiting
@@ -54,6 +127,19 @@ const authLimiter = rateLimit({ windowMs: 15 * 60_000, max: 20, standardHeaders:
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+// ── JWT auth middleware ────────────────────────────────────────────────────
+function requireJWT(req, res, next) {
+  const auth  = req.headers.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  if (!token) return res.status(401).json({ error: 'Authentication required.' });
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch {
+    return res.status(401).json({ error: 'Invalid or expired token.' });
+  }
+}
+
 // ── AUTH ROUTES ────────────────────────────────────────────────────────────
 app.post('/api/auth/signup', authLimiter, async (req, res) => {
   const { username, password } = req.body || {};
@@ -61,14 +147,14 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
   if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) return res.status(400).json({ error: 'Username: 3-20 chars, letters/numbers/underscores only.' });
   if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters.' });
 
-  const users = loadUsers();
-  if (users[username.toLowerCase()]) return res.status(409).json({ error: 'Username already taken.' });
+  const key = username.toLowerCase();
+  if (stmts.findUser.get(key)) return res.status(409).json({ error: 'Username already taken.' });
 
   const hash = await bcrypt.hash(password, 12);
-  users[username.toLowerCase()] = { username, passwordHash: hash, createdAt: Date.now(), pushSubscriptions: [] };
-  saveUsers(users);
+  stmts.insertUser.run(key, username, hash, Date.now());
 
   const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '30d' });
+  logger.info({ username }, 'New user registered');
   res.json({ token, username });
 });
 
@@ -76,56 +162,74 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'Username and password required.' });
 
-  const users = loadUsers();
-  const user  = users[username.toLowerCase()];
+  const user = stmts.findUser.get(username.toLowerCase());
   if (!user) return res.status(401).json({ error: 'Invalid username or password.' });
 
-  const ok = await bcrypt.compare(password, user.passwordHash);
+  const ok = await bcrypt.compare(password, user.password_hash);
   if (!ok) return res.status(401).json({ error: 'Invalid username or password.' });
 
   const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '30d' });
   res.json({ token, username: user.username });
 });
 
+// Account deletion — requires Bearer JWT + password confirmation
+app.delete('/api/auth/account', authLimiter, requireJWT, async (req, res) => {
+  const { password } = req.body || {};
+  if (!password) return res.status(400).json({ error: 'Password confirmation required.' });
+
+  const user = stmts.findUser.get(req.user.username.toLowerCase());
+  if (!user) return res.status(404).json({ error: 'Account not found.' });
+
+  const ok = await bcrypt.compare(password, user.password_hash);
+  if (!ok) return res.status(401).json({ error: 'Incorrect password.' });
+
+  stmts.deleteUser.run(req.user.username.toLowerCase());
+  logger.info({ username: req.user.username }, 'Account deleted');
+  res.json({ ok: true });
+});
+
 // ── TURN CREDENTIALS (short-lived, per-request) ───────────────────────────
 app.get('/api/turn-credentials', (req, res) => {
-  // Use freely available public TURN servers from Open Relay Project
-  res.json({
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      {
-        urls: [
-          'turn:openrelay.metered.ca:80',
-          'turn:openrelay.metered.ca:443',
-          'turn:openrelay.metered.ca:443?transport=tcp'
-        ],
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      }
-    ]
-  });
+  const iceServers = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' }
+  ];
+  // Use configured TURN server if provided; fall back to open relay
+  if (process.env.TURN_URL && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
+    iceServers.push({
+      urls:       process.env.TURN_URL,
+      username:   process.env.TURN_USERNAME,
+      credential: process.env.TURN_CREDENTIAL
+    });
+  } else {
+    iceServers.push({
+      urls: [
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:443?transport=tcp'
+      ],
+      username:   'openrelayproject',
+      credential: 'openrelayproject'
+    });
+  }
+  res.json({ iceServers });
 });
 
 // ── PUSH SUBSCRIPTION ─────────────────────────────────────────────────────
-app.post('/api/push/subscribe', (req, res) => {
-  const { subscription, username } = req.body || {};
-  if (!subscription || !username) return res.status(400).json({ error: 'Missing fields.' });
-  const users = loadUsers();
-  const key   = username.toLowerCase();
-  if (!users[key]) return res.status(404).json({ error: 'User not found.' });
-  const subs = users[key].pushSubscriptions || [];
-  const endpoint = subscription.endpoint;
-  if (!subs.find(s => s.endpoint === endpoint)) {
-    subs.push(subscription);
-    users[key].pushSubscriptions = subs.slice(-5); // keep last 5
-    saveUsers(users);
-  }
+app.post('/api/push/subscribe', requireJWT, (req, res) => {
+  if (!pushEnabled) return res.status(503).json({ error: 'Push notifications not configured.' });
+  const { subscription } = req.body || {};
+  if (!subscription || !subscription.endpoint) return res.status(400).json({ error: 'Missing subscription.' });
+  const key = req.user.username.toLowerCase();
+  if (!stmts.findUser.get(key)) return res.status(404).json({ error: 'User not found.' });
+  stmts.insertSub.run(key, subscription.endpoint, JSON.stringify(subscription));
+  stmts.deleteOldSubs.run(key, key);
   res.json({ ok: true });
 });
 
 // ── VAPID public key endpoint ──────────────────────────────────────────────
 app.get('/api/push/vapid-public-key', (req, res) => {
+  if (!pushEnabled) return res.status(503).json({ error: 'Push not configured.' });
   res.json({ key: VAPID_PUBLIC });
 });
 
@@ -150,7 +254,6 @@ io.on('connection', (socket) => {
 
   const ROOM_RE = /^[a-zA-Z0-9 _\-]{1,30}$/;
   const NAME_RE = /^[\S\s]{1,20}$/;
-  const PASS_RE = /^.{0,50}$/;
 
   socket.roomIds = new Set();
 
@@ -168,7 +271,7 @@ io.on('connection', (socket) => {
       }
     }
 
-    if (!rooms[roomId]) rooms[roomId] = { users: {}, meet: { users: {} }, password: password || null, messages: [] };
+    if (!rooms[roomId]) rooms[roomId] = { users: {}, meet: { users: {} }, password: password || null };
 
     rooms[roomId].users[socket.id] = { username, publicKey };
     socket.join(roomId);

@@ -50,6 +50,9 @@
   const btnThemeToggle   = document.getElementById('btn-theme-toggle');
   const reconnOverlay    = document.getElementById('reconnecting-overlay');
   const reconnMsg        = document.getElementById('reconnecting-msg');
+  const replyBar         = document.getElementById('reply-bar');
+  const replyBarLabel    = document.getElementById('reply-bar-label');
+  const btnCancelReply   = document.getElementById('btn-cancel-reply');
 
   // ── State ─────────────────────────────────────────────────────────────
   let socket       = null;
@@ -60,11 +63,12 @@
   let typingTimer  = null;
   let isTyping     = false;
   let isDarkTheme  = true;
+  let replyingTo   = null; // { a: author, p: preview } for current reply-to
 
   // Per-room state: roomId -> { nodes: Node[], users: [], unread: 0, typingText: '', password: '' }
   const roomStates = {};
   // Track message IDs for deletion/edit: msgId -> { row, bubble }
-  const msgNodes   = {};
+  const msgNodes   = new Map();
 
   // ── Session persistence (localStorage) ────────────────────────────────
   const SESSION_KEY = 'livechat_session';
@@ -266,11 +270,14 @@
         userVisibleOnly: true,
         applicationServerKey: _urlBase64ToUint8Array(key)
       });
-      if (myUsername) {
+      if (myUsername && authToken) {
         await fetch('/api/push/subscribe', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ subscription: sub, username: myUsername })
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ subscription: sub })
         });
       }
     } catch {}
@@ -309,7 +316,7 @@
     myUsername = username;
     selfIndicator.textContent = myUsername;
 
-    const roomPass = (typeof inputRoomPass !== 'undefined' && inputRoomPass) ? inputRoomPass.value.trim() : '';
+    const roomPass = inputRoomPass ? inputRoomPass.value.trim() : '';
 
     socket = io({ auth: { token: authToken || null } });
     mySocketId = null;
@@ -377,6 +384,7 @@
     messagesArea.scrollTop = messagesArea.scrollHeight;
 
     state.unread = 0;
+    updateTabTitle();
     chatRoomTitle.textContent = roomId;
     displayRoomId.textContent = roomId;
     typingIndicator.textContent = state.typingText;
@@ -434,6 +442,19 @@
       roomTabsEl.appendChild(li);
     });
   }
+
+  function updateTabTitle() {
+    const total = Object.values(roomStates).reduce((s, r) => s + (r.unread || 0), 0);
+    document.title = total > 0 ? `(${total}) LiveChat — Encrypted` : 'LiveChat — Encrypted';
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && roomStates[activeRoomId]) {
+      roomStates[activeRoomId].unread = 0;
+      renderRoomTabs();
+      updateTabTitle();
+    }
+  });
 
   // ── Add-room panel ────────────────────────────────────────────────────────
   btnAddRoom.addEventListener('click', (e) => {
@@ -520,7 +541,12 @@
       if (!entry) return;
       const decoded = E2E.decryptInRoom(rid || activeRoomId, encryptedMessage, nonce, from);
       if (decoded !== null) {
-        entry.bubble.textContent = decoded;
+        // Unwrap JSON envelope if present (new format)
+        let newText = decoded;
+        try { const p = JSON.parse(decoded); if (p && typeof p.t === 'string') newText = p.t; } catch {}
+        const textSpan = entry.bubble.querySelector('.msg-text');
+        if (textSpan) { textSpan.textContent = newText; }
+        else          { entry.bubble.textContent = newText; }
         const editedBadge = entry.bubble.querySelector('.edited-badge');
         if (!editedBadge) {
           const badge = document.createElement('span');
@@ -592,33 +618,50 @@
     const peers     = E2E.getAllPeerIdsForRoom(roomId);
     const timestamp = Date.now();
     const msgId     = Math.random().toString(36).slice(2);
+    const replyTo   = extra.replyTo || replyingTo;
 
-    appendMessage(roomId, { from: mySocketId, fromUsername: myUsername, text, messageType: type, timestamp, self: true, msgId });
+    appendMessage(roomId, { from: mySocketId, fromUsername: myUsername, text, messageType: type, timestamp, self: true, msgId, fileName: extra.fileName, fileSize: extra.fileSize, replyTo });
 
-    if (peers.length === 0) return;
+    if (peers.length === 0) { if (replyTo) _cancelReply(); return; }
+
+    // Encode as JSON so reply metadata travels inside the ciphertext
+    const plaintext = JSON.stringify({ t: text, r: replyTo || null });
 
     peers.forEach(peerId => {
       let encrypted;
-      try { encrypted = E2E.encryptForInRoom(roomId, peerId, text); } catch { return; }
+      try { encrypted = E2E.encryptForInRoom(roomId, peerId, plaintext); } catch { return; }
       socket.emit('send-message', {
         roomId, to: peerId,
         encryptedMessage: encrypted.encryptedMessage,
         nonce: encrypted.nonce,
         messageType: type, timestamp, msgId,
-        fileName: extra.fileName || undefined,
-        fileSize: extra.fileSize || undefined,
+        fileName:  extra.fileName  || undefined,
+        fileSize:  extra.fileSize  || undefined,
         skipEcho: true
       });
     });
+    if (replyTo) _cancelReply();
   }
 
   function handleIncomingMessage(payload) {
     const { from, fromUsername, encryptedMessage, nonce, messageType, timestamp, self: isSelf, roomId, msgId, fileName, fileSize } = payload;
     if (isSelf) return;
     if (!roomStates[roomId]) return;
-    const text = E2E.decryptInRoom(roomId, encryptedMessage, nonce, from);
-    if (text === null) return;
-    appendMessage(roomId, { from, fromUsername, text, messageType: messageType || 'text', timestamp, self: false, msgId, fileName, fileSize });
+    const decoded = E2E.decryptInRoom(roomId, encryptedMessage, nonce, from);
+    if (decoded === null) return;
+
+    // Try JSON envelope for reply-to support; fall back to plain text (older clients)
+    let text = decoded;
+    let replyTo = null;
+    try {
+      const parsed = JSON.parse(decoded);
+      if (parsed && typeof parsed.t === 'string') {
+        text    = parsed.t;
+        replyTo = parsed.r || null;
+      }
+    } catch { /* plain-text message from older client */ }
+
+    appendMessage(roomId, { from, fromUsername, text, messageType: messageType || 'text', timestamp, self: false, msgId, fileName, fileSize, replyTo });
     // Mark message as seen after a short delay
     if (msgId && roomId === activeRoomId) {
       setTimeout(() => socket.emit('mark-read', { roomId, msgId }), 500);
@@ -626,7 +669,7 @@
   }
 
   // ── Render ──────────────────────────────────────────────────────────────
-  function appendMessage(roomId, { from, fromUsername, text, messageType, timestamp, self: isSelf, msgId, fileName, fileSize }) {
+  function appendMessage(roomId, { from, fromUsername, text, messageType, timestamp, self: isSelf, msgId, fileName, fileSize, replyTo }) {
     const isActive = roomId === activeRoomId;
     const state = roomStates[roomId];
     if (!state) return;
@@ -660,10 +703,28 @@
     const bubble = document.createElement('div');
     bubble.className = messageType === 'sticker' ? 'msg-bubble sticker' : 'msg-bubble';
 
+    // Reply quote block
+    if (replyTo) {
+      const q  = document.createElement('div');
+      q.className = 'reply-quote';
+      const qa = document.createElement('span');
+      qa.className = 'reply-quote-author';
+      qa.textContent = replyTo.a || replyTo.author || 'Unknown';
+      const qp = document.createElement('span');
+      qp.className = 'reply-quote-text';
+      qp.textContent = replyTo.p || replyTo.preview || '';
+      q.appendChild(qa);
+      q.appendChild(qp);
+      bubble.appendChild(q);
+    }
+
     if (messageType === 'file' && text.startsWith('data:')) {
       _renderFileBubble(bubble, text, fileName, fileSize);
     } else {
-      bubble.textContent = text;
+      const msgText = document.createElement('span');
+      msgText.className = 'msg-text';
+      msgText.textContent = text;
+      bubble.appendChild(msgText);
     }
 
     row.appendChild(meta);
@@ -701,6 +762,7 @@
         actions.appendChild(btnEdit);
         actions.appendChild(btnDel);
       }
+      actions.appendChild(btnReply);
       actions.appendChild(btnReact);
       row.appendChild(actions);
 
@@ -712,7 +774,7 @@
       messagesArea.scrollTop = messagesArea.scrollHeight;
     } else {
       state.nodes.push(row);
-      if (!isSelf) { state.unread++; renderRoomTabs(); }
+      if (!isSelf) { state.unread++; renderRoomTabs(); updateTabTitle(); }
     }
   }
 
@@ -746,21 +808,29 @@
   }
 
   function _editMessage(msgId, bubble) {
-    const oldText = bubble.textContent.replace(' (edited)', '').trim();
+    const textSpan = bubble.querySelector('.msg-text');
+    const rawText  = textSpan ? textSpan.textContent : bubble.textContent;
+    const oldText  = rawText.replace(' (edited)', '').trim();
     const newText = prompt('Edit message:', oldText);
     if (!newText || newText.trim() === oldText) return;
     const roomId = activeRoomId;
     const peers  = E2E.getAllPeerIdsForRoom(roomId);
-    bubble.textContent = newText.trim();
+    if (textSpan) {
+      textSpan.textContent = newText.trim();
+    } else {
+      bubble.textContent = newText.trim();
+    }
     if (!bubble.querySelector('.edited-badge')) {
       const badge = document.createElement('span');
       badge.className = 'edited-badge';
       badge.textContent = ' (edited)';
       bubble.appendChild(badge);
     }
+    // JSON-encode to match new message format
+    const plaintext = JSON.stringify({ t: newText.trim() });
     peers.forEach(peerId => {
       let encrypted;
-      try { encrypted = E2E.encryptForInRoom(roomId, peerId, newText.trim()); } catch { return; }
+      try { encrypted = E2E.encryptForInRoom(roomId, peerId, plaintext); } catch { return; }
       socket.emit('edit-message', { roomId, msgId, to: peerId, encryptedMessage: encrypted.encryptedMessage, nonce: encrypted.nonce });
     });
   }
@@ -782,6 +852,21 @@
     });
     row.appendChild(picker);
   }
+
+  // ── Reply-to helpers ──────────────────────────────────────────────────────
+  function _startReply(msgId, author, preview) {
+    replyingTo = { msgId, a: author, p: preview };
+    if (replyBarLabel) replyBarLabel.textContent = `Replying to ${author}: ${preview}`;
+    if (replyBar)      replyBar.classList.remove('hidden');
+    messageInput.focus();
+  }
+
+  function _cancelReply() {
+    replyingTo = null;
+    if (replyBar) replyBar.classList.add('hidden');
+  }
+
+  if (btnCancelReply) btnCancelReply.addEventListener('click', _cancelReply);
 
   function appendSystemMessage(roomId, html) {
     const state = roomStates[roomId];

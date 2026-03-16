@@ -204,6 +204,15 @@
       <!-- Hidden file input -->
       <input id="file-input" type="file" accept="image/*,video/*,audio/*,.pdf,.txt,.zip" style="display:none" />
 
+      <!-- Reply preview bar (shown when replying to a message) -->
+      <div id="reply-bar" class="reply-bar hidden">
+        <div class="reply-bar-inner">
+          <span class="reply-bar-icon">&#x21A9;</span>
+          <span id="reply-bar-label" class="reply-bar-label"></span>
+        </div>
+        <button id="btn-cancel-reply" class="icon-btn reply-cancel-btn" title="Cancel reply">&#x2715;</button>
+      </div>
+
       <footer class="chat-input-bar">
         <button id="btn-emoji" class="toolbar-btn" title="Emojis">😊</button>
         <button id="btn-sticker" class="toolbar-btn" title="Stickers">🎨</button>
